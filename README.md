@@ -1,0 +1,72 @@
+# Dynamic Audio Redux
+
+A SillyTavern extension for playing background music that adapts to character emotions and situations.
+
+Based on the original [Dynamic Audio](https://github.com/SillyTavern/Extension-DynamicAudio) extension, rebuilt with better playlist management and a cleaner UI.
+
+## What it does
+
+- **Instrumental Mode**: Plays instrumental tracks that match the character's current emotion
+- **Songs Mode**: Plays any music with optional emotion filtering
+- **Playlist Mode**: Smart playlists (tag-based) or manual track selection
+- **Miniplayer**: Compact floating controls you can position anywhere
+- **Track Management**: Tag your music with emotions, add custom metadata, rename tracks
+
+## Setup
+
+1. Install the extension in SillyTavern
+2. Add music files to:
+   - `/data/<user>/assets/bgm/` (global tracks)
+   - `/data/<user>/characters/<name>/bgm/` (character-specific tracks)
+3. Click "Scan for Tracks" in the extension settings
+4. Tag your tracks with emotions and metadata (click the edit button on any track)
+
+## Tagging Tracks
+
+Click the edit icon next to any track to:
+- Set a display name (auto-cleans "Official Music Video" junk from filenames)
+- Mark it as instrumental
+- Tag it with emotions (joy, sadness, anger, etc.)
+- Add custom tags for filtering
+
+## Playlists
+
+**Smart Playlists**: Automatically include tracks matching certain tags
+- Tags like `Alice, Revenge on my Stepmother, drama, arc:revenge` or honestly anything you want + auto-detected emotions
+- Useful for chat/story arcs or specific scenarios
+
+**Manual Playlists**: Just pick the tracks you want
+- Good for favorites or curated sets
+
+## Slash Commands
+```
+/d-audio on                              # Enable audio
+/d-audio off                             # Disable audio
+/d-audio skip                            # Skip to next track
+/d-audio prev                            # Go to previous track
+
+/d-audio mode=instrumental               # Switch modes
+/d-audio mode=playlist playlist="Chill"  # Activate a playlist
+
+/d-audio autoswitch=on                   # Auto-switch on emotion changes
+/d-audio shuffle=on                      # Enable shuffle
+/d-audio loop=on                         # Loop current track
+/d-audio volume=75                       # Set volume
+
+/d-audio nowplaying                      # Get current track name
+/d-audio status                          # Show all current settings
+
+/d-audio "track name" playlist="Favorites"  # Add track to playlist
+/d-audio scan                                # Rescan for new tracks
+/d-audio migrate                             # Fix metadata after renaming files
+```
+
+Query settings by leaving the value empty:
+```
+/d-audio mode=          # Returns current mode
+/d-audio volume=        # Returns current volume
+```
+
+## Credits
+
+Original [Dynamic Audio](https://github.com/SillyTavern/Extension-DynamicAudio) extension by the SillyTavern team.

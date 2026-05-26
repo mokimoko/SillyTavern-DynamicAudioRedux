@@ -1,0 +1,13 @@
+{
+    "display_name": "Dynamic Audio Redux",
+    "loading_order": 14,
+    "requires": [],
+    "optional": ["classify"],
+    "minimum_client_version": "1.14.0",
+    "js": "index.js",
+    "css": "style.css",
+    "author": "chatelaine",
+    "version": "1.0.0",
+    "homePage": "https://github.com/chatelainedev/SillyTavern-DynamicAudioRedux",
+    "auto_update": true
+}
