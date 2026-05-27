@@ -37,7 +37,8 @@ Use SillyTavern's built-in extension installer:
 1. Add music files to:
    - `data/<your-user>/assets/bgm/` — global tracks (available everywhere)
    - `data/<your-user>/characters/<name>/bgm/` — character-specific tracks
-2. Open the **Audio Library** from the extensions menu (🎧 icon) and click **Scan**
+   - `data/<your-user>/user/files/<custom-folder>/` - any custom folder you want, nesting supported
+2. Open the **Audio Library** from the extensions menu (🎧 icon) and click **Scan** (or use Folder Import for custom folders)
 3. Tag your tracks — manually (pencil icon on any row) or hit **Auto-Tag** for bulk AI tagging
 4. Turn audio on in the Playback tab and pick a mode
 
