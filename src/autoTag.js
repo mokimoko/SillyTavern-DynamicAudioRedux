@@ -3,7 +3,11 @@
  * Part of Dynamic Audio Redux extension
  */
 
-import { getContext } from '../../../../extensions.js';
+import { getContext, extension_settings } from '../../../../extensions.js';
+import { generateRaw } from '../../../../../script.js';
+import { trackLibrary, EMOTION_TAGS } from './state.js';
+import { saveMetadata } from './scanner.js';
+import { darToast } from './ui.js';
 
 const DEBUG_PREFIX = '<Audio-AutoTag>';
 
@@ -202,58 +206,35 @@ export class AutoTag {
      * Show preview modal with suggested tags
      */
     showPreviewModal(taggedTracks, onApply) {
-        const backdrop = $('<div class="audio-modal-backdrop"></div>');
-        backdrop.css({
-            'position': 'fixed',
-            'inset': '0',
-            'background': 'rgba(0, 0, 0, 0.7)',
-            'z-index': '10000',
-            'display': 'flex',
-            'align-items': 'center',
-            'justify-content': 'center',
-            'backdrop-filter': 'blur(4px)'
-        });
+        const backdrop = $('<div class="dar-sub-backdrop"></div>');
         
         const modal = $(`
-            <div class="auto-tag-preview-modal">
-                <h3 style="margin-top: 0;">Review AI Tag Suggestions</h3>
-                <p style="opacity: 0.8; margin-bottom: 1em;">
-                    AI suggested tags for ${taggedTracks.length} tracks. Review and edit before applying.
-                </p>
+            <div class="dar-sub-modal dar-sub-modal--lg">
+                <h3>Review AI Tag Suggestions</h3>
+                <p>AI suggested tags for ${taggedTracks.length} tracks. Review and edit before applying.</p>
                 
-                <div id="tag_preview_list" style="max-height: 400px; overflow-y: auto; margin-bottom: 1em; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 5px;"></div>
+                <div id="tag_preview_list" class="dar-sub-list"></div>
                 
-                <div class="flex-container" style="gap: 0.5em;">
-                    <button class="menu_button" id="apply_all_tags" style="flex: 1; background: rgba(81, 207, 102, 0.2);">
+                <div class="dar-sub-actions">
+                    <button class="menu_button" id="apply_all_tags" style="background: rgba(81, 207, 102, 0.2);">
                         <i class="fa-solid fa-check"></i> Apply All Tags
                     </button>
-                    <button class="menu_button" id="cancel_tag_preview" style="flex: 1;">
+                    <button class="menu_button" id="cancel_tag_preview">
                         <i class="fa-solid fa-times"></i> Cancel
                     </button>
                 </div>
             </div>
         `);
         
-        modal.css({
-            'background': '#1a1a1a',
-            'border': '1px solid rgba(255, 255, 255, 0.2)',
-            'border-radius': '10px',
-            'padding': '1.5em',
-            'max-width': '700px',
-            'width': '90%',
-            'box-shadow': '0 8px 32px rgba(0, 0, 0, 0.5)',
-            'color': '#e0e0e0'
-        });
-        
         const list = modal.find('#tag_preview_list');
         
         // Build editable tag list
         taggedTracks.forEach((item, index) => {
             const trackItem = $(`
-                <div class="tag-preview-item" data-index="${index}" style="padding: 0.75em; margin-bottom: 0.5em; background: rgba(255, 255, 255, 0.05); border-radius: 5px; border: 1px solid rgba(255, 255, 255, 0.1);">
-                    <div style="font-weight: bold; margin-bottom: 0.5em;">${item.trackName}</div>
-                    <div style="display: flex; align-items: center; gap: 0.5em;">
-                        <label style="opacity: 0.7; min-width: 40px;">Tags:</label>
+                <div class="dar-sub-item" data-index="${index}">
+                    <div style="font-weight: 500; margin-bottom: 6px;">${item.trackName}</div>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <label>Tags:</label>
                         <input type="text" class="text_pole tag-input" value="${item.tags.join(', ')}" style="flex: 1;" data-index="${index}">
                     </div>
                 </div>
@@ -322,7 +303,7 @@ export class AutoTag {
         const untaggedTracks = this.getUntaggedTracks();
         
         if (untaggedTracks.length === 0) {
-            alert('No untagged tracks found! All tracks already have tags.');
+            darToast.info('No untagged tracks found! All tracks already have tags.');
             return;
         }
         
@@ -335,7 +316,7 @@ export class AutoTag {
             availableTracks = preselectedTracks.filter(path => untaggedTracks.includes(path));
             
             if (availableTracks.length === 0) {
-                alert('Selected tracks are already tagged!');
+                darToast.info('Selected tracks are already tagged!');
                 return;
             }
             
@@ -345,42 +326,27 @@ export class AutoTag {
             sourceMessage = `Found ${availableTracks.length} untagged tracks in your library.`;
         }
         
-        const backdrop = $('<div class="audio-modal-backdrop"></div>');
-        backdrop.css({
-            'position': 'fixed',
-            'inset': '0',
-            'background': 'rgba(0, 0, 0, 0.7)',
-            'z-index': '9999',
-            'display': 'flex',
-            'align-items': 'center',
-            'justify-content': 'center',
-            'backdrop-filter': 'blur(4px)'
-        });
+        const backdrop = $('<div class="dar-sub-backdrop"></div>');
         
         const modal = $(`
-            <div class="auto-tag-modal">
-                <h3 style="margin-top: 0;">Auto-Tag Tracks</h3>
-                <p style="opacity: 0.8; margin-bottom: 1em;">${sourceMessage}</p>
+            <div class="dar-sub-modal">
+                <h3>Auto-Tag Tracks</h3>
+                <p>${sourceMessage}</p>
+                <p>How many tracks would you like to tag in this batch?</p>
                 
-                <div style="margin-bottom: 1em;">
-                    <p style="font-size: 0.9em; opacity: 0.9;">
-                        How many tracks would you like to tag in this batch?
-                    </p>
-                </div>
-                
-                <div style="display: flex; gap: 0.5em; margin-bottom: 1em;">
-                    <button class="menu_button batch-size-btn" data-size="10" style="flex: 1;">
+                <div class="dar-sub-actions" style="margin-bottom: 12px;">
+                    <button class="menu_button batch-size-btn" data-size="10">
                         10 Tracks
                     </button>
-                    <button class="menu_button batch-size-btn" data-size="15" style="flex: 1;">
+                    <button class="menu_button batch-size-btn" data-size="15">
                         15 Tracks
                     </button>
-                    <button class="menu_button batch-size-btn" data-size="20" style="flex: 1;">
+                    <button class="menu_button batch-size-btn" data-size="20">
                         20 Tracks
                     </button>
                 </div>
                 
-                <div style="margin-bottom: 1em; padding: 0.75em; background: rgba(88, 101, 242, 0.1); border: 1px solid rgba(88, 101, 242, 0.3); border-radius: 5px; font-size: 0.9em;">
+                <div class="dar-sub-note">
                     <strong>Note:</strong> The AI will analyze track names and suggest appropriate tags. You'll be able to review and edit before applying.
                 </div>
                 
@@ -389,17 +355,6 @@ export class AutoTag {
                 </button>
             </div>
         `);
-        
-        modal.css({
-            'background': '#1a1a1a',
-            'border': '1px solid rgba(255, 255, 255, 0.2)',
-            'border-radius': '10px',
-            'padding': '1.5em',
-            'max-width': '500px',
-            'width': '90%',
-            'box-shadow': '0 8px 32px rgba(0, 0, 0, 0.5)',
-            'color': '#e0e0e0'
-        });
         
         backdrop.append(modal);
         $('body').append(backdrop);
@@ -418,7 +373,7 @@ export class AutoTag {
                 const taggedTracks = await this.getAITagSuggestions(tracksToProcess);
                 
                 if (taggedTracks.length === 0) {
-                    alert('AI could not confidently tag any of the tracks. Try with different tracks or tag them manually.');
+                    darToast.warn('AI could not confidently tag any of the tracks. Try with different tracks or tag them manually.');
                     backdrop.remove();
                     return;
                 }
@@ -428,20 +383,15 @@ export class AutoTag {
                 
                 // Show preview modal
                 this.showPreviewModal(taggedTracks, (count) => {
-                    // Update track list after applying
-                    if (window.updateTrackList) {
-                        window.updateTrackList();
-                    }
-                    if (window._expandedTrackListUpdate) {
-                        window._expandedTrackListUpdate();
-                    }
-                    
-                    alert(`Successfully tagged ${count} tracks!`);
+                    // saveMetadata() fires 'trackListChanged' which the
+                    // modal's Library tab listens for, so no explicit
+                    // re-render is needed here.
+                    darToast.success(`Successfully tagged ${count} tracks!`);
                 });
                 
             } catch (error) {
                 console.error(DEBUG_PREFIX, 'Error during auto-tagging:', error);
-                alert(`Failed to get AI tags: ${error.message}`);
+                darToast.error(`Failed to get AI tags: ${error.message}`);
                 backdrop.remove();
             }
         });
@@ -460,4 +410,138 @@ export class AutoTag {
             e.stopPropagation();
         });
     }
+}
+
+// ============================================================================
+// CONVENIENCE WRAPPERS
+// ============================================================================
+//
+// Constructs a new AutoTag with module-imported deps and opens its modal.
+// Lets callers (audioModal.js, index.js extensions-menu, etc.) trigger the
+// auto-tag UI without manually wiring up dependencies.
+
+export function openAutoTagModal() {
+    const autoTag = new AutoTag(
+        trackLibrary,
+        extension_settings,
+        saveMetadata,
+        EMOTION_TAGS,
+        generateRaw,
+    );
+    autoTag.openModal();
+}
+
+
+// ============================================================================
+// SINGLE-TRACK AUTO-TAG
+// ============================================================================
+
+/**
+ * Tag a single track via AI. Shows a compact confirmation modal with
+ * editable tags. Triggered by the wand button on untagged track rows.
+ */
+export async function autoTagSingle(trackPath) {
+    const autoTag = new AutoTag(
+        trackLibrary,
+        extension_settings,
+        saveMetadata,
+        EMOTION_TAGS,
+        generateRaw,
+    );
+
+    const meta = trackLibrary.metadata[trackPath] || {};
+    const filename = trackPath.split('/').pop();
+    const displayName = meta.title || decodeURIComponent(filename.replace(/\.[^.]+$/, ''));
+
+    darToast.info(`Asking AI to tag "${displayName}"...`);
+
+    try {
+        const taggedTracks = await autoTag.getAITagSuggestions([trackPath]);
+
+        if (taggedTracks.length === 0) {
+            darToast.warn(`AI couldn't confidently tag "${displayName}". Try the manual editor instead.`);
+            return;
+        }
+
+        showSingleTagConfirm(trackPath, displayName, taggedTracks[0].tags);
+
+    } catch (error) {
+        console.error('<Audio-AutoTag>', 'Single-track tagging failed:', error);
+        darToast.error(`Failed to tag: ${error.message}`);
+    }
+}
+
+/**
+ * Compact confirmation modal for single-track AI tag results.
+ */
+function showSingleTagConfirm(trackPath, displayName, suggestedTags) {
+    const backdrop = $('<div class="dar-sub-backdrop"></div>');
+
+    const modal = $(`
+        <div class="dar-sub-modal">
+            <h3>AI Tag Suggestion</h3>
+            <p style="font-style: italic; word-break: break-word;">${_esc(displayName)}</p>
+
+            <div style="margin-bottom: 12px;">
+                <label for="dar_single_tag_input" style="display: block; margin-bottom: 4px;">Suggested tags (edit before applying)</label>
+                <input type="text" class="text_pole" id="dar_single_tag_input" value="${_esc(suggestedTags.join(', '))}">
+            </div>
+
+            <div class="dar-sub-actions">
+                <button class="menu_button" id="dar_single_tag_apply" style="background: rgba(81, 207, 102, 0.2);">
+                    <i class="fa-solid fa-check"></i> Apply Tags
+                </button>
+                <button class="menu_button" id="dar_single_tag_cancel">
+                    <i class="fa-solid fa-times"></i> Cancel
+                </button>
+            </div>
+        </div>
+    `);
+
+    backdrop.append(modal);
+    $('body').append(backdrop);
+
+    setTimeout(() => $('#dar_single_tag_input').focus().select(), 100);
+
+    $('#dar_single_tag_apply').on('click', () => {
+        const tags = $('#dar_single_tag_input').val().trim()
+            .split(',').map(t => t.trim()).filter(Boolean);
+
+        if (tags.length === 0) {
+            darToast.warn('Enter at least one tag');
+            return;
+        }
+
+        trackLibrary.metadata[trackPath] = {
+            ...(trackLibrary.metadata[trackPath] || {}),
+            tags,
+        };
+        saveMetadata();
+        backdrop.remove();
+        darToast.success(`Tagged "${displayName}"`);
+    });
+
+    $('#dar_single_tag_cancel').on('click', () => backdrop.remove());
+
+    backdrop.on('click', (e) => {
+        if (e.target === backdrop[0]) backdrop.remove();
+    });
+    modal.on('click', (e) => e.stopPropagation());
+
+    $(document).on('keydown.darSingleTag', (e) => {
+        if (e.key === 'Escape') {
+            backdrop.remove();
+            $(document).off('keydown.darSingleTag');
+        }
+    });
+}
+
+/** Minimal HTML escaper (local to this module). */
+function _esc(s) {
+    return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
 }

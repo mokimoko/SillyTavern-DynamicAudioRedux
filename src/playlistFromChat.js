@@ -3,8 +3,13 @@
  * Part of Dynamic Audio Redux extension
  */
 
-import { getContext } from '../../../../extensions.js';
-import { chat } from '../../../../../script.js';
+import { getContext, extension_settings } from '../../../../extensions.js';
+import { chat, saveSettingsDebounced, generateRaw } from '../../../../../script.js';
+import { trackLibrary } from './state.js';
+import { updatePlaylistDropdown } from './playlists.js';
+import { playTrack } from './player.js';
+import { updateMiniplayerVisibility } from './miniplayer.js';
+import { darToast } from './ui.js';
 
 const DEBUG_PREFIX = '<Audio-PlaylistFromChat>';
 
@@ -227,9 +232,12 @@ export class PlaylistFromChat {
     
     /**
      * Get AI track suggestions using SillyTavern's AI backend
+     * @param {Object} analysis - analyzeChat() output
+     * @param {string} userNotes - optional free-form user notes
+     * @param {number} trackCount - target number of tracks (default 15)
      */
-    async getAISuggestions(analysis, userNotes = '') {
-        this.debugLog('Requesting AI track suggestions...');
+    async getAISuggestions(analysis, userNotes = '', trackCount = 15) {
+        this.debugLog(`Requesting AI track suggestions (target: ${trackCount})...`);
         
         // Build track list for AI
         const availableTracks = [];
@@ -275,7 +283,7 @@ export class PlaylistFromChat {
 2. A list of available music tracks with their tags
 3. Optional user notes
 
-Your task is to suggest 8-15 tracks that best match the conversation's mood and context. Focus on:
+Your task is to suggest exactly ${trackCount} tracks that best match the conversation's mood and context. Focus on:
 - Matching the emotional tone
 - Considering the story themes
 - Creating a cohesive listening experience
@@ -328,7 +336,7 @@ Use exact track names from the provided list.`
             tracksMessage += `- "${t.name}"${tagStr}\n`;
         });
         
-        tracksMessage += '\n\nPlease read through the story provided and suggest 8-15 tracks that best match the evolution of the plot, as if it was a movie and you were creating its soundtrack.\n\nIMPORTANT: You must respond with ONLY the JSON array. No explanations, no markdown code blocks, no preamble. The format must be: ["Track 1", "Track 2", ...]';
+        tracksMessage += `\n\nPlease read through the story provided and suggest exactly ${trackCount} tracks that best match the evolution of the plot, as if it was a movie and you were creating its soundtrack.\n\nIMPORTANT: You must respond with ONLY the JSON array. No explanations, no markdown code blocks, no preamble. The format must be: ["Track 1", "Track 2", ...]`;
         
         messages.push({
             role: 'user',
@@ -428,36 +436,113 @@ Use exact track names from the provided list.`
     }
     
     /**
+     * Generate a creative playlist name via AI based on chat context + optional user notes.
+     * Returns a plain string (no quotes, no preamble). Throws on failure.
+     */
+    async generatePlaylistName(analysis, userNotes = '') {
+        this.debugLog('Requesting AI playlist name...');
+
+        const messages = [];
+
+        messages.push({
+            role: 'system',
+            content: `You are a creative naming assistant. You will be given context about a roleplay story and must invent a single evocative playlist name for it.
+
+Rules:
+- Respond with ONLY the name itself. No quotes, no preamble, no explanation, no markdown.
+- 2 to 6 words. Title Case.
+- Evocative, atmospheric, or thematic — like an album title or movie soundtrack name.
+- Avoid generic words like "Playlist", "Soundtrack", "Mix", "Songs", "Music".
+- Do not include the character's literal name unless it fits naturally.`
+        });
+
+        let ctx = '';
+        if (analysis.characterName) ctx += `Character: ${analysis.characterName}\n`;
+        if (analysis.topEmotions.length > 0) ctx += `Emotions: ${analysis.topEmotions.join(', ')}\n`;
+        if (analysis.detectedThemes.length > 0) ctx += `Themes: ${analysis.detectedThemes.join(', ')}\n`;
+
+        if (analysis.recentMessages && analysis.recentMessages.length > 0) {
+            ctx += `\nRecent story excerpts:\n`;
+            analysis.recentMessages.slice(0, 6).forEach(msg => {
+                const speaker = msg.is_user ? analysis.userName : (analysis.characterName || 'Character');
+                const preview = (msg.mes || '').substring(0, 120);
+                ctx += `${speaker}: ${preview}${(msg.mes || '').length > 120 ? '...' : ''}\n`;
+            });
+        }
+
+        if (userNotes) {
+            ctx += `\nUser notes / desired vibe: ${userNotes}\n`;
+        }
+
+        ctx += `\nReturn the playlist name now. Just the name, nothing else.`;
+
+        messages.push({ role: 'user', content: ctx });
+
+        const result = await this.generateRaw({
+            prompt: messages,
+            trimNames: false
+        });
+
+        if (!result || !result.trim()) {
+            throw new Error('Empty response from AI');
+        }
+
+        this.debugLog('Raw name response: ' + result.substring(0, 120));
+
+        // Clean up the response: strip code fences, quotes, leading/trailing junk
+        let name = result.trim();
+        name = name.replace(/^```[a-zA-Z]*\n?/g, '').replace(/\n?```$/g, '');
+        // Take only the first non-empty line (in case the model added explanation despite instructions)
+        name = name.split(/\r?\n/).map(l => l.trim()).filter(Boolean)[0] || '';
+        // Strip surrounding quotes (regular + smart) and trailing punctuation
+        name = name.replace(/^["'“”‘’]+|["'“”‘’]+$/g, '').trim();
+        name = name.replace(/[.!?]+$/, '').trim();
+
+        // Sanity cap — if the model went long, truncate to first ~6 words
+        const words = name.split(/\s+/);
+        if (words.length > 8) {
+            name = words.slice(0, 6).join(' ');
+        }
+
+        if (!name) {
+            throw new Error('Could not parse a name from AI response');
+        }
+
+        return name;
+    }
+
+    /**
      * Open the playlist from chat creator modal
      */
     openModal() {
-        const backdrop = $('<div class="audio-modal-backdrop"></div>');
-        backdrop.css({
-            'position': 'fixed',
-            'inset': '0',
-            'background': 'rgba(0, 0, 0, 0.7)',
-            'z-index': '9999',
-            'display': 'flex',
-            'align-items': 'center',
-            'justify-content': 'center',
-            'backdrop-filter': 'blur(4px)'
-        });
+        const backdrop = $('<div class="dar-sub-backdrop"></div>');
         
         // Analyze chat immediately
         const analysis = this.analyzeChat();
+
+        // Persisted AI suggestion track count (10 / 15 / 20). Defaults to 15.
+        const savedCount = Number(this.extension_settings?.audio?.playlist_from_chat_ai_count) || 15;
+        const countOpts = [10, 15, 20]
+            .map(n => `<option value="${n}"${n === savedCount ? ' selected' : ''}>${n} tracks</option>`)
+            .join('');
         
         const modal = $(`
-            <div class="playlist-from-chat-modal">
-                <h3 style="margin-top: 0;">Create Playlist from Chat</h3>
+            <div class="dar-sub-modal dar-sub-modal--md">
+                <h3>Create Playlist from Chat</h3>
                 
-                <div style="margin-bottom: 1em;">
-                    <label for="playlist_name_input" style="display: block; margin-bottom: 0.3em;">Playlist Name</label>
-                    <input type="text" class="text_pole" id="playlist_name_input" value="${analysis.suggestedName}">
+                <div style="margin-bottom: 12px;">
+                    <label for="playlist_name_input" style="display: block; margin-bottom: 4px;">Playlist Name</label>
+                    <div style="display: flex; gap: 4px; align-items: stretch;">
+                        <input type="text" class="text_pole" id="playlist_name_input" value="${analysis.suggestedName}" style="flex: 1; min-width: 0;">
+                        <button class="menu_button" id="generate_playlist_name_btn" title="Generate name with AI" style="white-space: nowrap; padding: 0 12px;">
+                            <i class="fa-solid fa-wand-magic-sparkles"></i>
+                        </button>
+                    </div>
                 </div>
                 
-                <div style="margin-bottom: 1em;">
-                    <label style="display: block; margin-bottom: 0.3em;">Auto-Detected Context</label>
-                    <div style="padding: 0.75em; background: rgba(255, 255, 255, 0.05); border-radius: 5px; font-size: 0.9em;">
+                <div style="margin-bottom: 12px;">
+                    <label style="display: block; margin-bottom: 4px;">Auto-Detected Context</label>
+                    <div class="dar-sub-item">
                         <div><strong>Character:</strong> ${analysis.characterName || 'None'}</div>
                         ${analysis.topEmotions.length > 0 ? `<div><strong>Emotions:</strong> ${analysis.topEmotions.join(', ')}</div>` : ''}
                         ${analysis.detectedThemes.length > 0 ? `<div><strong>Themes:</strong> ${analysis.detectedThemes.join(', ')}</div>` : ''}
@@ -465,65 +550,83 @@ Use exact track names from the provided list.`
                     </div>
                 </div>
                 
-                <div style="margin-bottom: 1em;">
-                    <label for="suggested_tags_input" style="display: block; margin-bottom: 0.3em;">Suggested Tags (comma-separated)</label>
+                <div style="margin-bottom: 12px;">
+                    <label for="suggested_tags_input" style="display: block; margin-bottom: 4px;">Suggested Tags (comma-separated)</label>
                     <input type="text" class="text_pole" id="suggested_tags_input" value="${analysis.suggestedTags.join(', ')}">
-                    <small style="opacity: 0.7; font-size: 0.85em;">Edit these tags to fine-tune the playlist</small>
+                    <small style="opacity: 0.7; font-size: 11px;">Edit these tags to fine-tune the playlist</small>
                 </div>
                 
-                <div style="margin-bottom: 1em;">
-                    <label for="user_notes_input" style="display: block; margin-bottom: 0.3em;">Additional Notes for AI (optional)</label>
+                <div style="margin-bottom: 12px;">
+                    <label for="user_notes_input" style="display: block; margin-bottom: 4px;">Additional Notes for AI (optional)</label>
                     <textarea class="text_pole" id="user_notes_input" rows="3" placeholder="e.g., 'Focus on upbeat tracks' or 'Include battle music'"></textarea>
-                    <small style="opacity: 0.7; font-size: 0.85em;">These notes will be sent to the AI when requesting suggestions</small>
+                    <small style="opacity: 0.7; font-size: 11px;">These notes will be sent to the AI when requesting suggestions</small>
                 </div>
                 
-                <div id="ai_suggestions_area" style="display: none; margin-bottom: 1em;">
-                    <label style="display: block; margin-bottom: 0.3em;">AI Suggested Tracks</label>
-                    <div id="ai_suggested_tracks" style="max-height: 200px; overflow-y: auto; padding: 0.75em; background: rgba(81, 207, 102, 0.1); border: 1px solid rgba(81, 207, 102, 0.3); border-radius: 5px;">
+                <div id="ai_suggestions_area" style="display: none; margin-bottom: 12px;">
+                    <label style="display: block; margin-bottom: 4px;">AI Suggested Tracks</label>
+                    <div id="ai_suggested_tracks" style="max-height: 200px; overflow-y: auto; padding: 10px; background: rgba(81, 207, 102, 0.08); border: 1px solid rgba(81, 207, 102, 0.2); border-radius: 4px;">
                     </div>
                 </div>
                 
-                <div style="margin-bottom: 1em;">
-                    <label style="display: block; margin-bottom: 0.5em;">Creation Options</label>
-                    <div style="display: flex; gap: 0.5em; flex-wrap: wrap;">
-                        <button class="menu_button" id="create_smart_playlist_btn" style="flex: 1; white-space: nowrap;">
+                <div style="margin-bottom: 12px;">
+                    <label style="display: block; margin-bottom: 6px;">Creation Options</label>
+                    <div class="dar-sub-actions">
+                        <button class="menu_button" id="create_smart_playlist_btn" style="white-space: nowrap;">
                             <i class="fa-solid fa-magic"></i> Create Smart Playlist
                         </button>
-                        <button class="menu_button" id="get_ai_suggestions_btn" style="flex: 1; white-space: nowrap;">
-                            <i class="fa-solid fa-wand-magic-sparkles"></i> Get AI Suggestions
-                        </button>
+                        <div style="display: flex; gap: 4px; align-items: stretch; min-width: 0;">
+                            <select id="ai_track_count_select" class="text_pole" title="Number of tracks for AI to suggest" style="width: auto; padding: 0 8px; flex-shrink: 0;">
+                                ${countOpts}
+                            </select>
+                            <button class="menu_button" id="get_ai_suggestions_btn" style="white-space: nowrap; flex: 1;">
+                                <i class="fa-solid fa-wand-magic-sparkles"></i> Get AI Suggestions
+                            </button>
+                        </div>
                     </div>
-                    <small style="display: block; margin-top: 0.5em; opacity: 0.7; font-size: 0.85em;">
+                    <small style="display: block; margin-top: 6px; opacity: 0.7; font-size: 11px;">
                         Smart Playlist: Auto-matches tracks by tags<br>
                         AI Suggestions: Let AI pick specific tracks
                     </small>
                 </div>
                 
-                <div class="flex-container" style="gap: 0.5em;">
-                    <button class="menu_button" id="cancel_playlist_from_chat" style="flex: 1;">
-                        <i class="fa-solid fa-times"></i> Cancel
-                    </button>
-                </div>
+                <button class="menu_button" id="cancel_playlist_from_chat" style="width: 100%;">
+                    <i class="fa-solid fa-times"></i> Cancel
+                </button>
             </div>
         `);
-        
-        modal.css({
-            'background': '#1a1a1a',
-            'border': '1px solid rgba(255, 255, 255, 0.2)',
-            'border-radius': '10px',
-            'padding': '1.5em',
-            'max-width': '600px',
-            'width': '90%',
-            'max-height': '90vh',
-            'overflow-y': 'auto',
-            'box-shadow': '0 8px 32px rgba(0, 0, 0, 0.5)',
-            'color': '#e0e0e0'
-        });
         
         backdrop.append(modal);
         $('body').append(backdrop);
         
         let aiSuggestedTracks = [];
+
+        // Persist AI track count selection whenever it changes.
+        $('#ai_track_count_select').on('change', () => {
+            const val = Number($('#ai_track_count_select').val()) || 15;
+            if (!this.extension_settings.audio) this.extension_settings.audio = {};
+            this.extension_settings.audio.playlist_from_chat_ai_count = val;
+            this.saveSettingsDebounced();
+            this.debugLog(`AI track count set to ${val}`);
+        });
+
+        // Generate playlist name via AI (always overwrites the field).
+        $('#generate_playlist_name_btn').on('click', async () => {
+            const $btn = $('#generate_playlist_name_btn');
+            const originalHtml = $btn.html();
+            $btn.prop('disabled', true).html('<i class="fa-solid fa-spinner fa-spin"></i>');
+
+            try {
+                const userNotes = $('#user_notes_input').val().trim();
+                const name = await this.generatePlaylistName(analysis, userNotes);
+                $('#playlist_name_input').val(name);
+                darToast.success(`Generated name: ${name}`);
+            } catch (error) {
+                console.error(DEBUG_PREFIX, 'Name generation failed:', error);
+                darToast.error(`Failed to generate name: ${error.message}`);
+            } finally {
+                $btn.prop('disabled', false).html(originalHtml);
+            }
+        });
         
         // Create smart playlist - now with preview
         $('#create_smart_playlist_btn').on('click', () => {
@@ -531,14 +634,14 @@ Use exact track names from the provided list.`
             const tagsInput = $('#suggested_tags_input').val().trim();
             
             if (!name) {
-                alert('Please enter a playlist name');
+                darToast.warn('Please enter a playlist name');
                 return;
             }
             
             const tags = tagsInput ? tagsInput.split(',').map(t => t.trim()).filter(Boolean) : [];
             
             if (tags.length === 0) {
-                alert('Please enter at least one tag');
+                darToast.warn('Please enter at least one tag');
                 return;
             }
             
@@ -547,7 +650,7 @@ Use exact track names from the provided list.`
             const matches = this.filterTracksByTags(tags, context.name2, true);
             
             if (matches.length === 0) {
-                alert(`No tracks found matching tags: ${tags.join(', ')}`);
+                darToast.warn(`No tracks found matching tags: ${tags.join(', ')}`);
                 return;
             }
             
@@ -591,37 +694,27 @@ Use exact track names from the provided list.`
                 
                 this.saveSettingsDebounced();
                 
-                // Update dropdown
-                if (window.updatePlaylistDropdown) {
-                    window.updatePlaylistDropdown();
-                }
+                // Refresh playlist dispatchers (fires 'playlistsChanged')
+                updatePlaylistDropdown();
                 
                 // Switch to playlist mode and activate this playlist
                 this.extension_settings.audio.mode = 'playlist';
                 this.extension_settings.audio.active_playlist = name;
-                $('#audio_mode').val('playlist');
-                $('#audio_playlist_select').val(name);
-                if (window.updateModeUI) {
-                    window.updateModeUI();
-                }
-                
+
                 // Enable audio if not already
                 if (!this.extension_settings.audio.enabled) {
                     this.extension_settings.audio.enabled = true;
-                    $('#audio_enabled').prop('checked', true);
-                    if (window.updateMiniplayerVisibility) {
-                        window.updateMiniplayerVisibility();
-                    }
+                    updateMiniplayerVisibility();
                 }
                 
                 // Play the first track
-                if (matches.length > 0 && window.playTrack) {
-                    window.playTrack(matches[0]);
+                if (matches.length > 0) {
+                    playTrack(matches[0]);
                 }
                 
                 this.saveSettingsDebounced();
                 
-                alert(`Smart playlist "${name}" created with ${tags.length} tags (${matches.length} tracks) and now playing!`);
+                darToast.success(`Smart playlist "${name}" created with ${tags.length} tags (${matches.length} tracks) and now playing!`);
                 backdrop.remove();
             });
             
@@ -639,12 +732,13 @@ Use exact track names from the provided list.`
             
             try {
                 const userNotes = $('#user_notes_input').val().trim();
-                const result = await this.getAISuggestions(analysis, userNotes);
+                const trackCount = Number($('#ai_track_count_select').val()) || 15;
+                const result = await this.getAISuggestions(analysis, userNotes, trackCount);
                 
                 aiSuggestedTracks = result.tracks;
                 
                 if (aiSuggestedTracks.length === 0) {
-                    alert('AI did not suggest any tracks. Try adjusting your notes or tags.');
+                    darToast.warn('AI did not suggest any tracks. Try adjusting your notes or tags.');
                     $btn.prop('disabled', false).html(originalHtml);
                     return;
                 }
@@ -676,7 +770,7 @@ Use exact track names from the provided list.`
                     const name = $('#playlist_name_input').val().trim();
                     
                     if (!name) {
-                        alert('Please enter a playlist name');
+                        darToast.warn('Please enter a playlist name');
                         return;
                     }
                     
@@ -688,43 +782,33 @@ Use exact track names from the provided list.`
                     
                     this.saveSettingsDebounced();
                     
-                    // Update dropdown
-                    if (window.updatePlaylistDropdown) {
-                        window.updatePlaylistDropdown();
-                    }
+                    // Refresh playlist dispatchers (fires 'playlistsChanged')
+                    updatePlaylistDropdown();
                     
                     // Switch to playlist mode and activate this playlist
                     this.extension_settings.audio.mode = 'playlist';
                     this.extension_settings.audio.active_playlist = name;
-                    $('#audio_mode').val('playlist');
-                    $('#audio_playlist_select').val(name);
-                    if (window.updateModeUI) {
-                        window.updateModeUI();
-                    }
-                    
+
                     // Enable audio if not already
                     if (!this.extension_settings.audio.enabled) {
                         this.extension_settings.audio.enabled = true;
-                        $('#audio_enabled').prop('checked', true);
-                        if (window.updateMiniplayerVisibility) {
-                            window.updateMiniplayerVisibility();
-                        }
+                        updateMiniplayerVisibility();
                     }
                     
                     // Play the first track
-                    if (aiSuggestedTracks.length > 0 && window.playTrack) {
-                        window.playTrack(aiSuggestedTracks[0]);
+                    if (aiSuggestedTracks.length > 0) {
+                        playTrack(aiSuggestedTracks[0]);
                     }
                     
                     this.saveSettingsDebounced();
                     
-                    alert(`Manual playlist "${name}" created with ${aiSuggestedTracks.length} tracks and now playing!`);
+                    darToast.success(`Manual playlist "${name}" created with ${aiSuggestedTracks.length} tracks and now playing!`);
                     backdrop.remove();
                 });
                 
             } catch (error) {
                 console.error(DEBUG_PREFIX, 'Error getting AI suggestions:', error);
-                alert(`Failed to get AI suggestions: ${error.message}`);
+                darToast.error(`Failed to get AI suggestions: ${error.message}`);
                 $btn.prop('disabled', false).html(originalHtml);
             }
         });
@@ -741,4 +825,22 @@ Use exact track names from the provided list.`
             e.stopPropagation();
         });
     }
+}
+
+// ============================================================================
+// CONVENIENCE WRAPPER
+// ============================================================================
+//
+// Constructs a new PlaylistFromChat with module-imported deps and opens its
+// modal. Lets callers (audioModal.js "From Chat" button, index.js
+// extensions-menu, etc.) trigger the modal without manually wiring deps.
+
+export function openPlaylistFromChatModal() {
+    const playlistFromChat = new PlaylistFromChat(
+        trackLibrary,
+        extension_settings,
+        saveSettingsDebounced,
+        generateRaw,
+    );
+    playlistFromChat.openModal();
 }

@@ -1,71 +1,91 @@
 # Dynamic Audio Redux
 
-A SillyTavern extension for playing background music that adapts to character emotions and situations.
+A [SillyTavern](https://github.com/SillyTavern/SillyTavern) extension for background music that reacts to what's going on in your chat. Pick tracks by emotion, tag your library with AI, build playlists from your conversations, or just let it shuffle through whatever you've got.
 
-Based on the original [Dynamic Audio](https://github.com/SillyTavern/Extension-DynamicAudio) extension, rebuilt with better playlist management and a cleaner UI.
+Based on the original [Dynamic Audio](https://github.com/SillyTavern/Extension-DynamicAudio) extension by the SillyTavern team — rebuilt around a single tabbed modal, AI tagging, and smarter playlist tools.
 
-## What it does
+<p align="center">
+  <img src="https://files.catbox.moe/cpxnnr.png" width="200" />
+  <img src="https://files.catbox.moe/4gd79z.png" width="200" />
+</p>
 
-- **Instrumental Mode**: Plays instrumental tracks that match the character's current emotion
-- **Songs Mode**: Plays any music with optional emotion filtering
-- **Playlist Mode**: Smart playlists (tag-based) or manual track selection
-- **Miniplayer**: Compact floating controls you can position anywhere
-- **Track Management**: Tag your music with emotions, add custom metadata, rename tracks
+## Features
+
+**Three Playback Modes** — Instrumental (emotion-matched background music), Songs (any music, optionally filtered by emotion), or Playlist (smart tag-based or hand-picked manual playlists).
+
+**AI Auto-Tagging** — Point it at your untagged tracks and let an LLM tag them with emotions and metadata. Bulk-tag 10/15/20 tracks at a time, or click the wand icon on any single row for a one-off tag. Preview and edit before saving.
+
+**Playlist From Chat** — Generate a smart playlist based on the current scene. The AI reads recent messages and either picks tracks from your library or generates a tag-based playlist that pulls in whatever fits the mood.
+
+**Draggable Miniplayer** — Compact floating widget you can drop anywhere on screen. Snap-to-edges optional. Stays out of the way of ST drawers and popups.
+
+**Audio Library Modal** — The main UI. One tabbed modal with live now-playing controls, your full track library with search and filters, playlist management with a two-column drag-to-reorder editor, and preferences.
+
+## Installation
+
+Use SillyTavern's built-in extension installer:
+
+1. Open **Extensions** → **Install Extension**
+2. Paste this URL:
+   ```
+   https://github.com/chatelainedev/SillyTavern-DynamicAudioRedux
+   ```
+3. Click **Install** and reload if prompted
 
 ## Setup
 
-1. Install the extension in SillyTavern
-2. Add music files to:
-   - `/data/<user>/assets/bgm/` (global tracks)
-   - `/data/<user>/characters/<name>/bgm/` (character-specific tracks)
-3. Click "Scan for Tracks" in the extension settings
-4. Tag your tracks with emotions and metadata (click the edit button on any track)
+1. Add music files to:
+   - `data/<your-user>/assets/bgm/` — global tracks (available everywhere)
+   - `data/<your-user>/characters/<name>/bgm/` — character-specific tracks
+2. Open the **Audio Library** from the extensions menu (🎧 icon) and click **Scan**
+3. Tag your tracks — manually (pencil icon on any row) or hit **Auto-Tag** for bulk AI tagging
+4. Turn audio on in the Playback tab and pick a mode
 
 ## Tagging Tracks
 
-Click the edit icon next to any track to:
-- Set a display name (auto-cleans "Official Music Video" junk from filenames)
-- Mark it as instrumental
-- Tag it with emotions (joy, sadness, anger, etc.)
-- Add custom tags for filtering
+Click the edit icon on any track to set:
+
+- **Title** — auto-cleans junk like "Official Music Video" from filenames
+- **Instrumental** flag — separates vocal tracks from background-only
+- **Emotions** — joy, sadness, anger, etc. (drives emotion-matched playback)
+- **Custom tags** — anything you want, freeform. Used by smart playlists.
 
 ## Playlists
 
-**Smart Playlists**: Automatically include tracks matching certain tags
-- Tags like `Alice, Revenge on my Stepmother, drama, arc:revenge` or honestly anything you want + auto-detected emotions
-- Useful for chat/story arcs or specific scenarios
+**Smart Playlists** — Tag-based. Add any combination of emotion tags, character names, arc tags (`arc:revenge`), or freeform descriptors. Tracks matching the tags get pulled in automatically.
 
-**Manual Playlists**: Just pick the tracks you want
-- Good for favorites or curated sets
+**Manual Playlists** — Hand-picked. Two-column editor: available tracks on the left, your selections on the right. Click to move between columns, drag the grip handle to reorder.
+
+**From Chat** — AI-generated based on the current conversation. Choose how many recent messages to include and let it pick tracks or generate fitting tags.
 
 ## Slash Commands
+
 ```
-/d-audio on                              # Enable audio
-/d-audio off                             # Disable audio
-/d-audio skip                            # Skip to next track
-/d-audio prev                            # Go to previous track
+/d-audio on / off              # Enable or disable
+/d-audio skip / prev           # Transport
+/d-audio library               # Open the Audio Library modal
+/d-audio scan                  # Rescan for new tracks
+/d-audio migrate               # Re-link metadata after renaming files
+/d-audio status                # Print all current settings
+/d-audio nowplaying            # Print the current track name
 
-/d-audio mode=instrumental               # Switch modes
-/d-audio mode=playlist playlist="Chill"  # Activate a playlist
+/d-audio mode=instrumental     # Switch modes (instrumental / songs / playlist)
+/d-audio playlist="Chill"      # Switch to a specific playlist
+/d-audio autoswitch=on         # Auto-switch on emotion changes
+/d-audio shuffle=on
+/d-audio loop=on
+/d-audio volume=75
 
-/d-audio autoswitch=on                   # Auto-switch on emotion changes
-/d-audio shuffle=on                      # Enable shuffle
-/d-audio loop=on                         # Loop current track
-/d-audio volume=75                       # Set volume
-
-/d-audio nowplaying                      # Get current track name
-/d-audio status                          # Show all current settings
-
-/d-audio "track name" playlist="Favorites"  # Add track to playlist
-/d-audio scan                                # Rescan for new tracks
-/d-audio migrate                             # Fix metadata after renaming files
+/d-audio "track name" playlist="Favorites"   # Add a track to a manual playlist
 ```
 
-Query settings by leaving the value empty:
-```
-/d-audio mode=          # Returns current mode
-/d-audio volume=        # Returns current volume
-```
+Get the current value of any setting by leaving it empty: `/d-audio mode=`, `/d-audio volume=`, etc.
+
+## Notes
+
+- Tag matching is fuzzy, so casual tags like `Alice` or `revenge` will pick up tracks tagged with those terms whether they were set manually or by auto-tag.
+- The `migrate` command is useful when you rename audio files outside SillyTavern — it re-links the old metadata to new filenames wherever it can.
+- Debug mode (Preferences tab) logs detection info to the browser console.
 
 ## Credits
 

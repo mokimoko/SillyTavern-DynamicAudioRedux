@@ -1,154 +1,1602 @@
-#audio_settings .flex {
-    display: flex;
+/* =========================================================================
+   DynamicAudioRedux — style.css
+   ----------------------------------------------------------------------
+   Design tokens and component classes for the extension UI. All component
+   classes are prefixed with `dar-` and all CSS custom properties with
+   `--dar-` to avoid collisions with SillyTavern core CSS or other
+   extensions.
+   ========================================================================= */
+
+/* ---------- Design tokens --------------------------------------------- */
+:root {
+    /* Backgrounds (dark neutrals) */
+    --dar-bg-page: #09090a;
+    --dar-bg-modal: rgba(17, 17, 19, 0.96);
+    --dar-bg-elevated: rgba(255, 255, 255, 0.02);
+    --dar-bg-hover: rgba(255, 255, 255, 0.04);
+    --dar-bg-input: rgba(0, 0, 0, 0.3);
+    --dar-bg-current: rgba(107, 155, 115, 0.05);
+
+    /* Borders */
+    --dar-border-hairline: rgba(255, 255, 255, 0.05);
+    --dar-border-soft: rgba(255, 255, 255, 0.08);
+
+    /* Text */
+    --dar-text-primary: #d4d4d6;
+    --dar-text-secondary: rgba(212, 212, 214, 0.55);
+    --dar-text-muted: rgba(212, 212, 214, 0.32);
+
+    /* Accent green — currently-playing track ONLY */
+    --dar-accent: #6b9b73;
+    --dar-accent-soft: rgba(107, 155, 115, 0.08);
+    --dar-accent-dim: rgba(107, 155, 115, 0.4);
+
+    /* Neutral active — tabs, toggles, filters, focus */
+    --dar-neutral-active: rgba(255, 255, 255, 0.55);
+    --dar-neutral-active-strong: rgba(255, 255, 255, 0.85);
+    --dar-neutral-active-soft: rgba(255, 255, 255, 0.12);
+    --dar-neutral-active-dim: rgba(255, 255, 255, 0.25);
+
+    /* Radii */
+    --dar-radius-xs: 3px;
+    --dar-radius-sm: 4px;
+    --dar-radius-md: 6px;
+
+    /* Shadows */
+    --dar-shadow-modal: 0 16px 48px rgba(0, 0, 0, 0.55);
+    --dar-shadow-mini: 0 4px 16px rgba(0, 0, 0, 0.4);
+
+    /* Transitions */
+    --dar-t-fast: 100ms ease;
+    --dar-t-base: 160ms ease;
 }
 
-
-#audio_settings .flex.column {
-    flex-direction: column;
+/* Scope box-sizing defensively to our containers */
+.dar-modal *,
+.dar-modal *::before,
+.dar-modal *::after,
+.dar-miniplayer *,
+.dar-miniplayer *::before,
+.dar-miniplayer *::after {
+    box-sizing: border-box;
 }
 
-#audio_settings .flex.column-reverse {
-    flex-direction: column-reverse;
+/* ---------- Animations ------------------------------------------------ */
+@keyframes dar-modal-in {
+    from { opacity: 0; transform: translateY(6px) scale(0.99); }
+    to   { opacity: 1; transform: translateY(0)    scale(1); }
+}
+@keyframes dar-fade-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+@keyframes dar-eq-bounce {
+    0%, 100% { transform: scaleY(0.4); }
+    50%      { transform: scaleY(1); }
 }
 
-#audio_settings .flex.row {
-    flex-direction: row;
-}
-
-#audio_settings .flex.row-reverse {
-    flex-direction: row-reverse;
-}
-
-/* align-items: center;
-justify-content: flex-end;
-gap: 12px; */
-#audio_settings .flex.align-center {
-    align-items: center;
-}
-
-#audio_settings .flex.justify-center {
-    justify-content: center;
-}
-
-#audio_settings .flex.justify-start {
-    justify-content: flex-start;
-}
-
-#audio_settings .flex.justify-end {
-    justify-content: flex-end;
-}
-
-#audio_settings .flex.gap-12 {
-    gap: 12px;
-}
-
-#audio_settings .btn-refresh {
-    width: 32px;
-    height: 32px;
-    border-radius: 12px;
-}
-
-#audio_settings .audio-container .audio-mute-button-muted {
-    color: red;
-}
-
-#audio_settings .audio-container {
-    padding: 3px 10px;
-    display: flex;
-    gap: 10px;
-    align-items: center;
-    background-color: rgba(38, 38, 38, 0.5);
-    border: 1px rgb(75, 75, 75) solid;
-    border-radius: 10px;
-}
-
-#audio_settings .audio-container .audio-player-button {
-    position: relative;
-    height: 2rem;
-}
-
-#audio_settings .audio-container>.vol {
-    width: 100px;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-}
-
-#audio_settings .audio-container>.vol>input {
-    width: 100%;
-}
-
-#audio_settings .audio-container>.playlist {
-    flex-grow: 1;
-}
-
-#audio_settings .audio-container>.playlist>select {
-    height: 100%;
-    margin: 0 !important;
-}
-
-#gesture-catcher {
+/* ---------- Modal backdrop & shell ------------------------------------ */
+.dar-modal-backdrop {
     position: fixed;
-    top: 0;
+    inset: 0;
+    z-index: 100;
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.dar-modal {
+    width: min(780px, 92vw);
+    height: min(640px, 88vh);
+    background: var(--dar-bg-modal);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--dar-border-soft);
+    border-radius: var(--dar-radius-md);
+    box-shadow: var(--dar-shadow-modal);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    animation: dar-modal-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    color: var(--dar-text-primary);
+    font-family: inherit;
+    font-size: 13px;
+}
+
+/* ---------- Now-playing strip ----------------------------------------- */
+.dar-now-playing {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--dar-border-hairline);
+}
+.dar-np-info { flex: 1; min-width: 0; }
+.dar-np-title {
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 4px;
+    color: var(--dar-text-primary);
+}
+
+.dar-np-scrubber {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 10px;
+    color: var(--dar-text-muted);
+    font-variant-numeric: tabular-nums;
+}
+.dar-np-progress {
+    flex: 1;
+    height: 2px;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 1px;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+}
+.dar-np-progress-fill {
+    height: 100%;
+    width: 0%;
+    background: var(--dar-text-secondary);
+    border-radius: 1px;
+    position: relative;
+    transition: background var(--dar-t-fast);
+}
+.dar-np-progress:hover .dar-np-progress-fill { background: var(--dar-text-primary); }
+.dar-np-controls { display: flex; gap: 2px; }
+
+/* ---------- Universal icon button ------------------------------------- */
+.dar-icon-btn {
+    width: 26px;
+    height: 26px;
+    border: none;
+    background: transparent;
+    color: var(--dar-text-secondary);
+    border-radius: var(--dar-radius-xs);
+    cursor: pointer;
+    display: flex;
+
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-family: inherit;
+    transition: all var(--dar-t-fast);
+    padding: 0;
+}
+.dar-icon-btn:hover {
+    background: var(--dar-bg-hover);
+    color: var(--dar-text-primary);
+}
+.dar-icon-btn.active { color: var(--dar-neutral-active-strong); }
+.dar-modal-close { margin-left: 4px; }
+
+/* ---------- Tabs ------------------------------------------------------ */
+.dar-tabs {
+    display: flex;
+    align-items: center;
+    padding: 0 14px;
+    border-bottom: 1px solid var(--dar-border-hairline);
+    position: relative;
+}
+.dar-tab {
+    padding: 10px 12px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--dar-text-secondary);
+    background: none;
+    border: none;
+    cursor: pointer;
+    position: relative;
+    transition: color var(--dar-t-fast);
+    font-family: inherit;
+}
+.dar-tab:hover { color: var(--dar-text-primary); }
+.dar-tab.active { color: var(--dar-text-primary); }
+
+.dar-tab.active::after {
+    content: '';
+    position: absolute;
+    left: 10px;
+    right: 10px;
+    bottom: -1px;
+    height: 1px;
+    background: var(--dar-neutral-active-strong);
+}
+.dar-tabs-spacer { flex: 1; }
+.dar-tab-meta {
+    font-size: 10px;
+    color: var(--dar-text-muted);
+    padding-right: 4px;
+    font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Tab content ----------------------------------------------- */
+.dar-tab-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 14px;
+}
+.dar-tab-panel {
+    display: none;
+    animation: dar-fade-in 140ms ease;
+}
+.dar-tab-panel.active { display: block; }
+
+/* ---------- Library toolbar (search + actions) ------------------------ */
+.dar-lib-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 10px;
+}
+
+.dar-search {
+    flex: 1;
+    position: relative;
+}
+.dar-search > i {
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--dar-text-muted);
+    font-size: 11px;
+    pointer-events: none;
+}
+.dar-search input {
+    width: 100%;
+    padding: 6px 10px 6px 28px;
+    background: var(--dar-bg-input);
+    border: 1px solid var(--dar-border-hairline);
+    border-radius: var(--dar-radius-sm);
+    color: var(--dar-text-primary);
+    font-size: 12px;
+    font-family: inherit;
+    outline: none;
+    transition: border-color var(--dar-t-fast);
+}
+.dar-search input::placeholder { color: var(--dar-text-muted); }
+.dar-search input:focus { border-color: var(--dar-neutral-active-dim); }
+
+/* ---------- Text button (icon + label, no container) ----------------- */
+.dar-text-btn {
+    padding: 6px 10px;
+    background: transparent;
+    border: none;
+    color: var(--dar-text-secondary);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    display: inline-flex;
+
+    align-items: center;
+    gap: 6px;
+    border-radius: var(--dar-radius-xs);
+    transition: all var(--dar-t-fast);
+    font-family: inherit;
+}
+.dar-text-btn:hover {
+    background: var(--dar-bg-hover);
+    color: var(--dar-text-primary);
+}
+.dar-text-btn i { font-size: 10px; }
+
+/* ---------- Filter row ------------------------------------------------ */
+.dar-filter-row {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+}
+.dar-filter {
+    padding: 4px 8px;
+    background: transparent;
+    border: none;
+    color: var(--dar-text-muted);
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    font-family: inherit;
+    border-radius: var(--dar-radius-xs);
+    transition: all var(--dar-t-fast);
+}
+.dar-filter:hover {
+    color: var(--dar-text-secondary);
+    background: var(--dar-bg-hover);
+}
+.dar-filter.active { color: var(--dar-text-primary); }
+
+.dar-filter.active::after {
+    content: '';
+    display: inline-block;
+    width: 3px;
+    height: 3px;
+    background: var(--dar-neutral-active);
+    border-radius: 50%;
+    margin-left: 5px;
+    vertical-align: middle;
+}
+.dar-filter-divider {
+    width: 1px;
+    height: 12px;
+    background: var(--dar-border-hairline);
+    margin: 0 4px;
+}
+
+/* ---------- Track list & rows ----------------------------------------- */
+.dar-track-list {
+    display: flex;
+    flex-direction: column;
+    border-top: 1px solid var(--dar-border-hairline);
+}
+.dar-track-row {
+    display: grid;
+    grid-template-columns: 22px 20px 1fr auto auto;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 8px;
+    cursor: pointer;
+    border-bottom: 1px solid var(--dar-border-hairline);
+    transition: background var(--dar-t-fast);
+    position: relative;
+}
+.dar-track-row:hover { background: var(--dar-bg-hover); }
+.dar-track-row.current { background: var(--dar-bg-current); }
+
+.dar-track-row.current::before {
+    content: '';
+    position: absolute;
     left: 0;
-    width: 100vw;
-    height: 100vh;
-    z-index: 9999;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: var(--dar-accent);
+}
+.dar-track-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    color: var(--dar-text-muted);
+    font-size: 10px;
+}
+.dar-track-row:hover .dar-track-icon { color: var(--dar-text-secondary); }
+.dar-track-row.current .dar-track-icon { color: var(--dar-accent); }
+
+/* Equalizer (currently-playing indicator inside .dar-track-icon) */
+.dar-eq {
+    display: inline-flex;
+    align-items: flex-end;
+    gap: 2px;
+    height: 12px;
+}
+.dar-eq span {
+    display: block;
+    width: 2px;
+    background: var(--dar-accent);
+    border-radius: 1px;
+    animation: dar-eq-bounce 0.9s ease-in-out infinite;
+}
+.dar-eq span:nth-child(1) { animation-delay: 0s;   height: 60%; }
+.dar-eq span:nth-child(2) { animation-delay: 0.2s; height: 90%; }
+
+.dar-eq span:nth-child(3) { animation-delay: 0.4s; height: 50%; }
+.dar-eq span:nth-child(4) { animation-delay: 0.1s; height: 75%; }
+
+.dar-track-info { min-width: 0; }
+.dar-track-title {
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--dar-text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 2px;
+}
+.dar-track-row.current .dar-track-title { font-weight: 500; }
+.dar-track-sub {
+    font-size: 10px;
+    color: var(--dar-text-muted);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+.dar-track-sub i { font-size: 8px; }
+
+/* Tags — flat, sharp, no rounded pills */
+.dar-track-tags {
+    display: flex;
+    gap: 3px;
+    flex-wrap: nowrap;
+    max-width: 260px;
+    overflow: hidden;
+}
+.dar-tag {
+    padding: 1px 6px;
+    background: var(--dar-bg-elevated);
+    border-radius: var(--dar-radius-xs);
+    font-size: 10px;
+    color: var(--dar-text-secondary);
+    cursor: pointer;
+
+    transition: all var(--dar-t-fast);
+    white-space: nowrap;
+}
+.dar-tag:hover {
+    background: var(--dar-bg-hover);
+    color: var(--dar-text-primary);
+}
+.dar-tag.empty {
+    background: transparent;
+    color: var(--dar-text-muted);
+    font-style: italic;
+    padding-left: 0;
+}
+
+/* Track row hover-revealed actions */
+.dar-track-actions {
+    display: flex;
+    gap: 0;
     opacity: 0;
+    transition: opacity var(--dar-t-fast);
+}
+.dar-track-row:hover .dar-track-actions { opacity: 1; }
+.dar-track-row.current .dar-track-actions { opacity: 0.5; }
+.dar-track-row.current:hover .dar-track-actions { opacity: 1; }
+.dar-track-actions .dar-icon-btn {
+    width: 22px;
+    height: 22px;
+    font-size: 10px;
+}
+
+/* ---------- Sections (Playback / Preferences tabs) -------------------- */
+.dar-section { margin-bottom: 18px; }
+.dar-section:last-child { margin-bottom: 0; }
+.dar-section-title {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+
+    color: var(--dar-text-muted);
+    margin-bottom: 6px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--dar-border-hairline);
+}
+.dar-field {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 0;
+}
+.dar-field + .dar-field { border-top: 1px solid var(--dar-border-hairline); }
+.dar-field-label {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+.dar-field-name {
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--dar-text-primary);
+}
+.dar-field-hint {
+    font-size: 10px;
+    color: var(--dar-text-muted);
+}
+
+/* ---------- Form controls --------------------------------------------- */
+.dar-select-field,
+.dar-number-field {
+    background: var(--dar-bg-input);
+    border: 1px solid var(--dar-border-hairline);
+    border-radius: var(--dar-radius-xs);
+    color: var(--dar-text-primary);
+    padding: 4px 8px;
+    font-size: 11px;
+    font-family: inherit;
+    outline: none;
+    transition: border-color var(--dar-t-fast);
+}
+
+.dar-select-field {
+    padding-right: 24px;
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath fill='%23777' d='M4 5L0 0h8z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    min-width: 130px;
+}
+.dar-number-field {
+    width: 64px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+.dar-select-field:hover,
+.dar-number-field:hover { border-color: var(--dar-border-soft); }
+.dar-select-field:focus,
+.dar-number-field:focus { border-color: var(--dar-neutral-active-dim); }
+
+/* ---------- Toggle switch (sharp edges) ------------------------------- */
+.dar-toggle {
+    position: relative;
+    width: 28px;
+    height: 16px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 2px;
+    cursor: pointer;
+    transition: background var(--dar-t-base);
+    flex-shrink: 0;
+}
+.dar-toggle::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 12px;
+    height: 12px;
+    background: var(--dar-text-secondary);
+    border-radius: 1px;
+
+    transition: transform var(--dar-t-base), background var(--dar-t-base);
+}
+.dar-toggle.on { background: var(--dar-neutral-active-soft); }
+.dar-toggle.on::after {
+    transform: translateX(12px);
+    background: var(--dar-neutral-active-strong);
+}
+
+/* ---------- Playlist grid --------------------------------------------- */
+.dar-playlist-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 6px;
+}
+.dar-playlist-card {
+    background: var(--dar-bg-elevated);
+    border: 1px solid var(--dar-border-hairline);
+    border-radius: var(--dar-radius-sm);
+    padding: 10px 12px;
+    cursor: pointer;
+    transition: all var(--dar-t-fast);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.dar-playlist-card:hover {
+    background: var(--dar-bg-hover);
+    border-color: var(--dar-border-soft);
+}
+.dar-playlist-card.new {
+    border-style: dashed;
+    align-items: center;
+    justify-content: center;
+    min-height: 56px;
+    color: var(--dar-text-muted);
+    background: transparent;
+}
+
+.dar-playlist-card.new:hover {
+    color: var(--dar-text-primary);
+    border-color: var(--dar-border-soft);
+}
+.dar-pl-name { font-size: 12px; font-weight: 500; }
+.dar-pl-count { font-size: 10px; color: var(--dar-text-muted); }
+.dar-pl-type { font-size: 10px; color: var(--dar-text-muted); }
+.dar-playlist-card.active {
+    border-color: var(--dar-accent);
+    background: color-mix(in srgb, var(--dar-accent) 8%, var(--dar-bg-elevated));
+}
+.dar-playlist-card .dar-pl-actions {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    display: none;
+    gap: 2px;
+}
+.dar-playlist-card { position: relative; }
+.dar-playlist-card:hover .dar-pl-actions { display: flex; }
+.dar-pl-actions button {
+    background: var(--dar-bg-hover);
+    border: 1px solid var(--dar-border-hairline);
+    border-radius: var(--dar-radius-xs, 3px);
+    color: var(--dar-text-muted);
+    cursor: pointer;
+    padding: 2px 5px;
+    font-size: 10px;
+    line-height: 1;
+}
+.dar-pl-actions button:hover { color: var(--dar-text-primary); }
+
+/* ---------- Miniplayer (draggable, floating) -------------------------- */
+/* z-index 1000 keeps the miniplayer above chat content (z 1-30) but
+   safely BELOW SillyTavern drawers/panels (z 3000-4100), popup dialogs,
+   toastr, and .ui-front (z 9999-10000). Opening any ST drawer or our
+   own audio modal will cover the miniplayer, which is what we want. */
+.dar-miniplayer {
+    position: fixed;
+    z-index: 1000;
+    background: rgba(0, 0, 0, 0.65);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: var(--dar-radius-sm);
+    padding: 4px 6px;
+    width: 170px;
+    box-shadow: var(--dar-shadow-mini);
+    opacity: 0.4;
+    transition: opacity var(--dar-t-base);
+    cursor: grab;
+    color: var(--dar-text-primary);
+    font-family: inherit;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: none; /* prevent browser-native scroll/zoom gestures on pointer drag */
+}
+.dar-miniplayer:hover { opacity: 1; }
+.dar-miniplayer:active { cursor: grabbing; }
+/* Dragging class is set on pointerdown so the grabbing cursor and full
+   opacity persist even when setPointerCapture suppresses :active. */
+.dar-miniplayer--dragging {
+    cursor: grabbing !important;
+    opacity: 1 !important;
+}
+.dar-miniplayer-controls {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.dar-mp-btn {
+    width: 22px;
+    height: 22px;
+    border: none;
+    background: transparent;
+    color: var(--dar-text-secondary);
+    cursor: pointer;
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    transition: all var(--dar-t-fast);
+    padding: 0;
+}
+.dar-mp-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--dar-text-primary);
+}
+.dar-mp-progress {
+    flex: 1;
+    height: 2px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 1px;
+    position: relative;
+    overflow: hidden;
+    cursor: pointer;
+}
+.dar-mp-progress-fill {
+    height: 100%;
+    width: 0%;
+    background: var(--dar-neutral-active-strong);
+    border-radius: 1px;
+}
+
+.dar-miniplayer-label {
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.85);
+    color: var(--dar-text-muted);
+    padding: 3px 8px;
+    border-radius: var(--dar-radius-xs);
+    font-size: 9px;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity var(--dar-t-base);
+}
+.dar-miniplayer:hover .dar-miniplayer-label { opacity: 1; }
+
+/* ---------- Modal scrollbar (WebKit) ---------------------------------- */
+.dar-tab-content::-webkit-scrollbar { width: 6px; }
+.dar-tab-content::-webkit-scrollbar-track { background: transparent; }
+.dar-tab-content::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 3px;
+}
+.dar-tab-content::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.12);
+}
+
+/* ---------- Placeholder (empty-state messaging) ---------------------- */
+.dar-placeholder {
+    text-align: center;
+    color: var(--dar-text-muted);
+    font-size: 12px;
+    padding: 60px 20px;
+    font-style: italic;
+}
+
+/* ---------- Toast notifications (ui.js darToast) ---------------------- */
+/* z-index 9998: above our modal (100), drawers (3000), movingDivs (4000),
+   miniplayer (1000); just under ST's popups/toastr (9999-10000). */
+.dar-toast-container {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    z-index: 9998;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    pointer-events: none;
+    max-width: min(420px, calc(100vw - 32px));
+}
+.dar-toast {
+    pointer-events: auto;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 12px;
+    background: var(--dar-bg-modal);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--dar-border-soft);
+    border-left-width: 3px;
+    border-radius: var(--dar-radius-md);
+    box-shadow: var(--dar-shadow-mini);
+    color: var(--dar-text-primary);
+    font-size: 12px;
+    font-family: inherit;
+    line-height: 1.4;
+    animation: dar-toast-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    transition: opacity 200ms ease, transform 200ms ease;
+}
+.dar-toast--leaving {
+    opacity: 0;
+    transform: translateX(20px);
+}
+.dar-toast-icon {
+    flex-shrink: 0;
+    font-size: 14px;
+    line-height: 1.3;
+    margin-top: 1px;
+}
+.dar-toast-msg {
+    flex: 1;
+    min-width: 0;
+    word-wrap: break-word;
+}
+.dar-toast-close {
+    flex-shrink: 0;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--dar-text-muted);
+    border-radius: var(--dar-radius-xs);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    transition: all var(--dar-t-fast);
+    margin-top: -2px;
+}
+.dar-toast-close:hover {
+    background: var(--dar-bg-hover);
+    color: var(--dar-text-primary);
+}
+
+/* Type variants — colored left border + icon */
+.dar-toast--success { border-left-color: var(--dar-accent); }
+.dar-toast--success .dar-toast-icon { color: var(--dar-accent); }
+
+.dar-toast--error { border-left-color: #c97070; }
+.dar-toast--error .dar-toast-icon { color: #c97070; }
+
+.dar-toast--warn { border-left-color: #d4a05a; }
+.dar-toast--warn .dar-toast-icon { color: #d4a05a; }
+
+.dar-toast--info { border-left-color: var(--dar-neutral-active-strong); }
+.dar-toast--info .dar-toast-icon { color: var(--dar-neutral-active-strong); }
+
+@keyframes dar-toast-in {
+    from { opacity: 0; transform: translateX(20px); }
+    to   { opacity: 1; transform: translateX(0); }
+}
+
+/* ---------- Confirm dialog (ui.js darConfirm) ------------------------- */
+/* z-index 5000: above our own modal (100) so a delete-confirm sits on top
+   of the audio modal. Below ST's popups (9999+). */
+.dar-confirm-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 5000;
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: dar-confirm-fade-in 160ms ease;
+    transition: opacity 160ms ease;
+}
+.dar-confirm-backdrop--leaving { opacity: 0; }
+
+.dar-confirm {
+    width: min(380px, 88vw);
+    background: var(--dar-bg-modal);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--dar-border-soft);
+    border-radius: var(--dar-radius-md);
+    box-shadow: var(--dar-shadow-modal);
+    padding: 20px;
+    color: var(--dar-text-primary);
+    font-family: inherit;
+    font-size: 13px;
+    animation: dar-modal-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.dar-confirm-title {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: var(--dar-text-primary);
+}
+.dar-confirm-msg {
+    color: var(--dar-text-secondary);
+    line-height: 1.5;
+    margin-bottom: 18px;
+}
+.dar-confirm-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+.dar-confirm-btn {
+    padding: 7px 14px;
+    border: 1px solid var(--dar-border-soft);
+    background: transparent;
+    color: var(--dar-text-primary);
+    border-radius: var(--dar-radius-sm);
+    font-size: 12px;
+    font-weight: 500;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all var(--dar-t-fast);
+}
+.dar-confirm-btn:hover {
+    background: var(--dar-bg-hover);
+    border-color: var(--dar-neutral-active-soft);
+}
+.dar-confirm-btn:focus-visible {
+    outline: none;
+    border-color: var(--dar-neutral-active-dim);
+    box-shadow: 0 0 0 2px var(--dar-neutral-active-soft);
+}
+.dar-confirm-btn--cancel {
+    color: var(--dar-text-secondary);
+}
+.dar-confirm-btn--confirm {
+    background: var(--dar-neutral-active-soft);
+    border-color: var(--dar-neutral-active-dim);
+}
+.dar-confirm-btn--confirm:hover {
+    background: var(--dar-neutral-active-dim);
+}
+.dar-confirm-btn--danger {
+    background: rgba(201, 112, 112, 0.15);
+    border-color: rgba(201, 112, 112, 0.4);
+    color: #e09a9a;
+}
+.dar-confirm-btn--danger:hover {
+    background: rgba(201, 112, 112, 0.25);
+    border-color: rgba(201, 112, 112, 0.6);
+    color: #f0b0b0;
+}
+
+@keyframes dar-confirm-fade-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+/* =========================================================================
+   Bulk selection — Library tab
+   ========================================================================= */
+
+/* Checkbox column on each track row. The icon is FontAwesome (fa-square /
+   fa-square-check). Stays visible-but-faint at rest; brightens on hover and
+   when the row is selected so it's discoverable without being noisy. */
+.dar-track-row .dar-track-check {
+    flex-shrink: 0;
+    width: 22px;
+    height: 22px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    color: var(--dar-neutral-inactive, rgba(255, 255, 255, 0.35));
+    opacity: 0;
+    cursor: pointer;
+    transition: opacity 140ms ease, color 140ms ease;
+    user-select: none;
+}
+
+.dar-track-row:hover .dar-track-check,
+.dar-track-row.selected .dar-track-check {
+    opacity: 1;
+}
+
+.dar-track-row.selected .dar-track-check {
+    color: var(--dar-accent, #7aa2f7);
+}
+
+.dar-track-check:focus-visible {
+    outline: 2px solid var(--dar-accent, #7aa2f7);
+    outline-offset: 2px;
+    border-radius: 4px;
+    opacity: 1;
+}
+
+/* Selected row treatment — subtle accent tint + left bar. Sits below the
+   `.current` treatment so the now-playing row still wins visually if both
+   classes are present. */
+.dar-track-row.selected {
+    background: rgba(122, 162, 247, 0.10);
+    box-shadow: inset 3px 0 0 var(--dar-accent, #7aa2f7);
+}
+
+.dar-track-row.selected.current {
+    background: rgba(122, 162, 247, 0.18);
+}
+
+/* Bulk action bar — slots between the filter row and the track list when
+   there's an active selection. Glass aesthetic matching the modal. */
+.dar-bulk-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 8px 0;
+    padding: 8px 12px;
+    border-radius: 8px;
+    background: rgba(20, 25, 42, 0.98);
+    border: 1px solid rgba(122, 162, 247, 0.25);
+    animation: dar-bulk-bar-in 160ms ease;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.dar-bulk-bar[hidden] {
+    display: none;
+}
+
+.dar-bulk-count {
+    font-weight: 600;
+    color: var(--dar-accent, #7aa2f7);
+    margin-right: auto;
+    font-size: 13px;
+}
+
+.dar-bulk-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--dar-text, #e6e6e6);
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.dar-bulk-btn:hover {
+    background: rgba(255, 255, 255, 0.10);
+    border-color: rgba(255, 255, 255, 0.20);
+}
+
+.dar-bulk-btn--ghost {
+    background: transparent;
+    color: var(--dar-neutral-inactive, rgba(255, 255, 255, 0.55));
+}
+
+.dar-bulk-btn--ghost:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--dar-text, #e6e6e6);
+}
+
+@keyframes dar-bulk-bar-in {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* =========================================================================
+   Bulk tag editor — modal that opens from the "Add tags" bulk-bar button.
+   Reuses .dar-confirm-backdrop for the overlay; this is the dialog body.
+   ========================================================================= */
+
+.dar-bulk-tag-modal {
+    width: min(460px, 92vw);
+    max-height: 86vh;
+    overflow-y: auto;
+    padding: 22px 24px;
+    background: var(--dar-modal-bg, rgba(20, 22, 30, 0.96));
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 12px;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.55);
+    color: var(--dar-text, #e6e6e6);
+    animation: dar-modal-in 180ms ease;
+}
+
+.dar-bulk-tag-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 16px;
+    color: var(--dar-text, #e6e6e6);
+}
+
+.dar-bulk-tag-header i {
+    color: var(--dar-accent, #7aa2f7);
+}
+
+.dar-bulk-tag-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 0;
+    cursor: pointer;
+    font-size: 13px;
+}
+
+.dar-bulk-tag-row input[type="checkbox"] {
+    accent-color: var(--dar-accent, #7aa2f7);
     cursor: pointer;
 }
 
-/* Bulk selection styling */
-.track-item .track-checkbox {
-    flex-shrink: 0;
-    opacity: 0;
-    transition: opacity 0.2s ease;
-    pointer-events: none;
+.dar-bulk-tag-section {
+    margin-top: 14px;
 }
 
-.track-item:hover .track-checkbox,
-.track-item.selected-track .track-checkbox {
-    opacity: 1;
-    pointer-events: auto;
+.dar-bulk-tag-section-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 8px 0;
+    background: transparent;
+    border: none;
+    color: var(--dar-text, #e6e6e6);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    text-align: left;
 }
 
-.track-item.selected-track {
-    background-color: rgba(88, 101, 242, 0.2) !important;
-    border-left: 3px solid #5865f2 !important;
+.dar-bulk-tag-section-toggle i {
+    color: var(--dar-neutral-inactive, rgba(255, 255, 255, 0.55));
+    transition: transform 120ms ease;
+    font-size: 11px;
+    width: 11px;
 }
 
-.track-item.current-track {
-    background-color: rgba(81, 207, 102, 0.2) !important;
-    border-left: 3px solid #51cf66 !important;
+.dar-bulk-tag-section-toggle:hover i {
+    color: var(--dar-text, #e6e6e6);
 }
 
-/* Filter buttons */
-.filter-btn {
-    opacity: 0.6;
-    transition: opacity 0.2s ease;
+.dar-bulk-emotion-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4px 12px;
+    padding: 8px 4px 4px 16px;
+    max-height: 220px;
+    overflow-y: auto;
+}
+
+.dar-bulk-emotion-grid[hidden] {
+    display: none;
+}
+
+.dar-emotion-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    cursor: pointer;
+    user-select: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
     white-space: nowrap;
-    padding: 0.5em 1em;
 }
 
-.filter-btn:hover {
-    opacity: 0.8;
+.dar-emotion-check input[type="checkbox"] {
+    accent-color: var(--dar-accent, #7aa2f7);
+    cursor: pointer;
+    flex-shrink: 0;
 }
 
-.filter-btn.active {
-    opacity: 1;
-    background: rgba(88, 101, 242, 0.3);
-    border: 1px solid rgba(88, 101, 242, 0.5);
+.dar-bulk-tag-label {
+    display: block;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--dar-neutral-active, rgba(255, 255, 255, 0.75));
+    margin-bottom: 6px;
 }
 
-/* Slide up animation for bulk action bar */
-@keyframes slideUp {
-    from {
-        opacity: 0;
-        transform: translateX(-50%) translateY(20px);
-    }
-    to {
-        opacity: 1;
-        transform: translateX(-50%) translateY(0);
-    }
+.dar-bulk-tag-input {
+    width: 100%;
+    padding: 8px 10px;
+    font-size: 13px;
+    color: var(--dar-text, #e6e6e6);
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 6px;
+    outline: none;
+    transition: border-color 120ms ease;
+}
+
+.dar-bulk-tag-input:focus {
+    border-color: var(--dar-accent, #7aa2f7);
+}
+
+.dar-bulk-tag-hint {
+    margin-top: 16px;
+    padding: 10px 12px;
+    font-size: 11.5px;
+    line-height: 1.5;
+    color: var(--dar-neutral-active, rgba(255, 255, 255, 0.7));
+    background: rgba(122, 162, 247, 0.06);
+    border: 1px solid rgba(122, 162, 247, 0.18);
+    border-radius: 6px;
+}
+
+.dar-bulk-tag-hint i {
+    color: var(--dar-accent, #7aa2f7);
+    margin-right: 4px;
+}
+
+.dar-bulk-tag-hint strong {
+    color: var(--dar-text, #e6e6e6);
+}
+
+.dar-bulk-tag-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 18px;
+}
+
+/* =========================================================================
+   Sub-modals — shared backdrop + panel pattern
+   -------------------------------------------------------------------------
+   Used by: autoTag.js, playlistFromChat.js, playlists.js, trackList.js.
+   Replaces per-modal inline jQuery .css({}) calls with class-based styling
+   that uses dar- design tokens for visual consistency.
+   z-index 5000: above the main audio modal (100) and miniplayer (1000),
+   below ST popups/toastr (9999+). Same layer as dar-confirm.
+   ========================================================================= */
+
+.dar-sub-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 5000;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: dar-confirm-fade-in 160ms ease;
+}
+
+.dar-sub-modal {
+    background: var(--dar-bg-modal);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--dar-border-soft);
+    border-radius: var(--dar-radius-md);
+    box-shadow: var(--dar-shadow-modal);
+    padding: 20px;
+    width: min(500px, 90vw);
+    max-height: 80vh;
+    overflow-y: auto;
+    color: var(--dar-text-primary);
+    font-family: inherit;
+    font-size: 13px;
+    animation: dar-modal-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.dar-sub-modal--md { width: min(600px, 90vw); }
+.dar-sub-modal--lg { width: min(700px, 90vw); }
+
+/* Sub-modal typography */
+.dar-sub-modal h3 {
+    margin: 0 0 8px 0;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--dar-text-primary);
+}
+
+.dar-sub-modal p {
+    color: var(--dar-text-secondary);
+    line-height: 1.5;
+    margin: 0 0 12px 0;
+    font-size: 13px;
+}
+
+/* Info/note box inside sub-modals */
+.dar-sub-note {
+    padding: 10px 12px;
+    background: rgba(88, 101, 242, 0.08);
+    border: 1px solid rgba(88, 101, 242, 0.2);
+    border-radius: var(--dar-radius-sm);
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--dar-text-secondary);
+    margin-bottom: 12px;
+}
+
+.dar-sub-note strong { color: var(--dar-text-primary); }
+
+/* Button row inside sub-modals */
+.dar-sub-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.dar-sub-actions > * { flex: 1; }
+
+/* Item rows inside sub-modal lists (tag preview, migration suggestions) */
+.dar-sub-item {
+    padding: 10px 12px;
+    margin-bottom: 6px;
+    background: var(--dar-bg-elevated);
+    border-radius: var(--dar-radius-sm);
+    border: 1px solid var(--dar-border-hairline);
+}
+
+.dar-sub-item label {
+    color: var(--dar-text-secondary);
+    font-size: 12px;
+    min-width: 40px;
+}
+
+/* Scrollable list container */
+.dar-sub-list {
+    max-height: 400px;
+    overflow-y: auto;
+    margin-bottom: 12px;
+    border: 1px solid var(--dar-border-hairline);
+    border-radius: var(--dar-radius-sm);
+}
+
+/* Sub-modal scrollbar */
+.dar-sub-modal::-webkit-scrollbar,
+.dar-sub-list::-webkit-scrollbar { width: 6px; }
+.dar-sub-modal::-webkit-scrollbar-track,
+.dar-sub-list::-webkit-scrollbar-track { background: transparent; }
+.dar-sub-modal::-webkit-scrollbar-thumb,
+.dar-sub-list::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 3px;
+}
+.dar-sub-modal::-webkit-scrollbar-thumb:hover,
+.dar-sub-list::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.12);
+}
+
+
+/* ========================================================================== *
+ * Transfer List — two-column picker for manual playlist create/edit.         *
+ * Left: available tracks. Right: selected tracks (drag-to-reorder).          *
+ * ========================================================================== */
+
+.dar-transfer {
+    display: flex;
+    gap: 10px;
+    height: 340px;
+    margin-bottom: 12px;
+}
+
+.dar-transfer-col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--dar-border-hairline, rgba(255,255,255,0.06));
+    border-radius: 8px;
+    overflow: hidden;
+    background: rgba(0, 0, 0, 0.15);
+}
+
+.dar-transfer-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--dar-text-muted, rgba(255,255,255,0.5));
+    border-bottom: 1px solid var(--dar-border-hairline, rgba(255,255,255,0.06));
+    flex-shrink: 0;
+}
+
+.dar-transfer-header .dar-transfer-count {
+    font-weight: 400;
+    opacity: 0.7;
+}
+
+.dar-transfer-search {
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--dar-border-hairline, rgba(255,255,255,0.06));
+    flex-shrink: 0;
+}
+
+.dar-transfer-search input {
+    width: 100%;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 12px;
+    color: var(--dar-text-primary, #e6e6e6);
+    outline: none;
+}
+
+.dar-transfer-search input:focus {
+    border-color: rgba(122, 162, 247, 0.4);
+}
+
+.dar-transfer-items {
+    flex: 1;
+    overflow-y: auto;
+    padding: 4px 0;
+}
+
+.dar-transfer-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    font-size: 12px;
+    cursor: pointer;
+    color: var(--dar-text-primary, #e6e6e6);
+    transition: background 80ms ease;
+    user-select: none;
+}
+
+.dar-transfer-item:hover {
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.dar-transfer-item .dar-ti-name {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.dar-transfer-item .dar-ti-source {
+    font-size: 10px;
+    opacity: 0.45;
+    flex-shrink: 0;
+}
+
+/* Icons for add/remove actions */
+.dar-transfer-item .dar-ti-icon {
+    flex-shrink: 0;
+    font-size: 10px;
+    opacity: 0.3;
+    transition: opacity 80ms;
+}
+.dar-transfer-item:hover .dar-ti-icon { opacity: 0.7; }
+
+/* Drag handle on selected side */
+.dar-transfer-item .dar-ti-grip {
+    cursor: grab;
+    opacity: 0.25;
+    font-size: 10px;
+    flex-shrink: 0;
+}
+.dar-transfer-item:hover .dar-ti-grip { opacity: 0.5; }
+.dar-transfer-item .dar-ti-grip:active { cursor: grabbing; }
+
+/* Drag states */
+.dar-transfer-item.dragging {
+    opacity: 0.35;
+    background: rgba(122, 162, 247, 0.08);
+}
+.dar-transfer-item.drag-over {
+    border-top: 2px solid var(--dar-accent, #7aa2f7);
+    padding-top: 4px;
+}
+
+/* Empty state */
+.dar-transfer-empty {
+    padding: 20px 10px;
+    text-align: center;
+    font-size: 11px;
+    color: var(--dar-text-muted, rgba(255,255,255,0.35));
+    font-style: italic;
+}
+
+/* Transfer list scrollbar */
+.dar-transfer-items::-webkit-scrollbar { width: 5px; }
+.dar-transfer-items::-webkit-scrollbar-track { background: transparent; }
+.dar-transfer-items::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 3px;
+}
+.dar-transfer-items::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.12);
+}
+
+
+/* ============================================================================
+   FOLDER IMPORT — added by folderImport.js + audioModal.js Library tab updates.
+   Folder badge on track rows, the import modal's picker / verify / manage UI,
+   and inline-code styling for help text inside .dar-sub-note.
+   ============================================================================ */
+
+/* Folder badge in the track row's sub line ("imported [folder] <name>") */
+.dar-folder-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: 6px;
+    padding: 1px 8px;
+    border-radius: 10px;
+    background: var(--dar-neutral-active-soft);
+    color: var(--dar-text-secondary);
+    font-size: 0.9em;
+    line-height: 1.4;
+    white-space: nowrap;
+}
+.dar-folder-pill i {
+    font-size: 0.85em;
+    opacity: 0.85;
+}
+
+/* Inline code blocks in help text (paths, filenames) */
+.dar-sub-note code {
+    background: var(--dar-neutral-active-soft);
+    padding: 1px 6px;
+    border-radius: var(--dar-radius-xs);
+    font-family: var(--monoFontFamily, ui-monospace, SFMono-Regular, Menlo, monospace);
+    font-size: 0.92em;
+    color: var(--dar-text-primary);
+}
+
+/* Already-registered folders list */
+.dar-folder-existing {
+    margin: 10px 0 14px;
+}
+.dar-folder-existing:empty {
+    display: none;
+}
+.dar-folder-existing-title {
+    font-size: 0.78em;
+    color: var(--dar-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+}
+.dar-folder-existing-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-radius: var(--dar-radius-sm);
+    background: var(--dar-bg-elevated);
+    border: 1px solid var(--dar-border-hairline);
+    margin-bottom: 4px;
+    font-size: 0.95em;
+}
+.dar-folder-existing-item > i {
+    color: var(--dar-text-secondary);
+    width: 14px;
+}
+.dar-folder-existing-name {
+    flex: 1;
+    color: var(--dar-text-primary);
+}
+
+/* Picker row */
+.dar-folder-pick-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 12px 0;
+    flex-wrap: wrap;
+}
+.dar-folder-pick-status {
+    color: var(--dar-text-secondary);
+    font-size: 0.9em;
+    flex: 1;
+    min-width: 0;
+}
+
+/* Verify step */
+.dar-folder-verify-spinner {
+    padding: 16px;
+    text-align: center;
+    color: var(--dar-text-secondary);
+}
+.dar-folder-verify-spinner i {
+    margin-right: 6px;
+}
+
+.dar-folder-section {
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    border-radius: var(--dar-radius-sm);
+    border: 1px solid var(--dar-border-hairline);
+    background: var(--dar-bg-elevated);
+}
+.dar-folder-section--ok {
+    border-color: var(--dar-accent-dim);
+    background: var(--dar-accent-soft);
+}
+.dar-folder-section--missing {
+    border-color: rgba(220, 130, 110, 0.35);
+    background: rgba(220, 130, 110, 0.08);
+}
+.dar-folder-section-title {
+    font-weight: 600;
+    color: var(--dar-text-primary);
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.dar-folder-section--ok .dar-folder-section-title i {
+    color: var(--dar-accent);
+}
+.dar-folder-section--missing .dar-folder-section-title i {
+    color: rgb(220, 130, 110);
+}
+.dar-folder-file-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    font-size: 0.9em;
+    color: var(--dar-text-secondary);
+}
+.dar-folder-file-list li {
+    padding: 2px 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    word-break: break-all;
+}
+.dar-folder-file-list li i {
+    opacity: 0.7;
+    width: 14px;
+    flex-shrink: 0;
+}
+.dar-folder-more {
+    color: var(--dar-text-muted);
+    font-style: italic;
 }
