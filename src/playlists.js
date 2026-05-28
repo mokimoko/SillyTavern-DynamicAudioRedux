@@ -234,7 +234,7 @@ function openManualPlaylistEditor({ isEdit = false, name = '', existingTracks = 
                         <span class="dar-transfer-count" id="dar_mpl_avail_count">0</span>
                     </div>
                     <div class="dar-transfer-search">
-                        <input type="text" id="dar_mpl_avail_search" placeholder="Filter tracks...">
+                        <input type="text" id="dar_mpl_avail_search" placeholder="Filter by name, source, or tag...">
                     </div>
                     <div class="dar-transfer-items" id="dar_mpl_avail"></div>
                 </div>
@@ -270,6 +270,7 @@ function openManualPlaylistEditor({ isEdit = false, name = '', existingTracks = 
             tracks.forEach(t => all.push({ path: t, source: char }));
         });
         trackLibrary.global.forEach(t => all.push({ path: t, source: 'global' }));
+        (trackLibrary.imported || []).forEach(t => all.push({ path: t, source: 'imported' }));
         return all;
     }
 
@@ -292,7 +293,11 @@ function openManualPlaylistEditor({ isEdit = false, name = '', existingTracks = 
         const filtered = sq
             ? all.filter(t => {
                 const d = trackDisplay(t.path, t.source);
-                return d.name.toLowerCase().includes(sq) || t.source.toLowerCase().includes(sq);
+                if (d.name.toLowerCase().includes(sq) || t.source.toLowerCase().includes(sq)) {
+                    return true;
+                }
+                const tags = (trackLibrary.metadata[t.path] || {}).tags || [];
+                return tags.some(tag => tag.toLowerCase().includes(sq));
             })
             : all;
 
@@ -328,6 +333,7 @@ function openManualPlaylistEditor({ isEdit = false, name = '', existingTracks = 
             tracks.forEach(t => { sourceMap[t] = char; });
         });
         trackLibrary.global.forEach(t => { sourceMap[t] = 'global'; });
+        (trackLibrary.imported || []).forEach(t => { sourceMap[t] = 'imported'; });
 
         $el.html(selected.map((path, i) => {
             const d = trackDisplay(path, sourceMap[path] || '');

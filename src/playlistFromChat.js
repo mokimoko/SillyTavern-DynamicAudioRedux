@@ -46,6 +46,9 @@ export class PlaylistFromChat {
             });
         }
         
+        // Imported tracks are always part of the pool (user-curated).
+        allTracks = [...(this.trackLibrary.imported || []), ...allTracks];
+        
         // Normalize query tags for better matching
         const normalizedQueryTags = tags.map(t => t.toLowerCase().trim());
         
@@ -264,6 +267,18 @@ export class PlaylistFromChat {
                 name: metadata.title || filename,
                 tags: metadata.tags || [],
                 source: 'global',
+                path: path
+            });
+        });
+        
+        // Add imported tracks (user-curated folders under /user/files/)
+        (this.trackLibrary.imported || []).forEach(path => {
+            const metadata = this.trackLibrary.metadata[path] || {};
+            const filename = path.split('/').pop();
+            availableTracks.push({
+                name: metadata.title || filename,
+                tags: metadata.tags || [],
+                source: 'imported',
                 path: path
             });
         });
