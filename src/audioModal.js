@@ -73,7 +73,7 @@ import { openPlaylistFromChatModal } from './playlistFromChat.js';
 
 const MODAL_ID = 'dar-audio-modal-backdrop';
 const VALID_TABS = ['nowplaying', 'playback', 'library', 'playlists', 'preferences'];
-const DEFAULT_TAB = 'library';
+const DEFAULT_TAB = 'nowplaying';
 
 let modalRoot = null;      // the .dar-modal-backdrop element (full overlay)
 let modalShell = null;     // the inner .dar-modal element
@@ -600,6 +600,7 @@ function wireNowPlayingTab() {
     audioEvents.addEventListener('modeChanged',        renderNowPlaying);
     audioEvents.addEventListener('playlistsChanged',   renderNowPlaying);
     audioEvents.addEventListener('tracksScanned',      renderNowPlaying);
+    audioEvents.addEventListener('trackListChanged',   renderNowPlaying);  // tag/title edits
 
     renderNowPlaying();
 }

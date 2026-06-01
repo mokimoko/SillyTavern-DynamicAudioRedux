@@ -335,7 +335,12 @@ export function openTrackEditor(trackPath) {
         allTags.push(...selectedEmotions);
         allTags.push(...otherTags);
 
-        trackLibrary.metadata[trackPath] = { title, tags: allTags };
+        // Preserve existing metadata fields (folder, subfolder, originalName,
+        // etc) — for imported tracks these are critical: dropping `folder`
+        // would orphan the track from its source folder and make it
+        // disappear from the library on next scan/reload.
+        const existing = trackLibrary.metadata[trackPath] || {};
+        trackLibrary.metadata[trackPath] = { ...existing, title, tags: allTags };
         saveMetadata();
         backdrop.remove();
     });
