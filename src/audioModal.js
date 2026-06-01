@@ -31,7 +31,7 @@
  * re-opens. Mounted on document.body. Esc / backdrop / close button close.
  */
 
-import { extension_settings } from '../../../../extensions.js';
+import { extension_settings, getContext } from '../../../../extensions.js';
 import { saveSettingsDebounced } from '../../../../../script.js';
 import {
     debugLog,
@@ -39,6 +39,7 @@ import {
     trackLibrary,
     audioEvents,
     EMOTION_TAGS,
+    isQueueActive,
 } from './state.js';
 import {
     onPreviousTrack,
@@ -47,12 +48,17 @@ import {
     selectTrack,
     formatTime,
     filterTracksByTags,
+    addToQueue,
+    removeFromQueue,
+    clearQueue,
+    playQueueTrack,
 } from './player.js';
 import { scanTracks, saveMetadata } from './scanner.js';
 import { openTrackEditor, migrateMetadata } from './trackList.js';
 import {
     updateMiniplayerVisibility,
     updateMiniplayerPosition,
+    updateMiniplayerContent,
 } from './miniplayer.js';
 import {
     createSmartPlaylist,
@@ -60,13 +66,13 @@ import {
     editPlaylist,
     updatePlaylistDropdown,
 } from './playlists.js';
-import { darToast, darConfirm } from './ui.js';
+import { darToast, darConfirm, showVolumePopup, hideVolumePopup } from './ui.js';
 import { openAutoTagModal, autoTagSingle } from './autoTag.js';
 import { openFolderImportModal } from './folderImport.js';
 import { openPlaylistFromChatModal } from './playlistFromChat.js';
 
 const MODAL_ID = 'dar-audio-modal-backdrop';
-const VALID_TABS = ['playback', 'library', 'playlists', 'preferences'];
+const VALID_TABS = ['nowplaying', 'playback', 'library', 'playlists', 'preferences'];
 const DEFAULT_TAB = 'library';
 
 let modalRoot = null;      // the .dar-modal-backdrop element (full overlay)
@@ -94,12 +100,14 @@ function buildModal() {
                         <button class="dar-icon-btn" data-dar="np-playpause" title="Play/Pause" type="button"><i class="fa-solid fa-play"></i></button>
                         <button class="dar-icon-btn" data-dar="np-skip"      title="Skip"      type="button"><i class="fa-solid fa-forward-step"></i></button>
                         <button class="dar-icon-btn" data-dar="np-loop"      title="Loop"      type="button"><i class="fa-solid fa-repeat"></i></button>
+                        <button class="dar-icon-btn" data-dar="np-volume"    title="Mute/Unmute" type="button"><i class="fa-solid fa-volume-high"></i></button>
                     </div>
                     <button class="dar-icon-btn dar-modal-close" data-dar="modal-close" title="Close" type="button"><i class="fa-solid fa-xmark"></i></button>
                 </div>
 
                 <!-- Tabs -->
                 <div class="dar-tabs">
+                    <button class="dar-tab" data-tab="nowplaying"  type="button">Now Playing</button>
                     <button class="dar-tab" data-tab="playback"    type="button">Playback</button>
                     <button class="dar-tab" data-tab="library"     type="button">Library</button>
                     <button class="dar-tab" data-tab="playlists"   type="button">Playlists</button>
@@ -110,6 +118,10 @@ function buildModal() {
 
                 <!-- Tab content (placeholders; populated in later steps) -->
                 <div class="dar-tab-content">
+                    <div class="dar-tab-panel" data-panel="nowplaying">
+                        <div class="dar-npt-header" data-dar="npt-header"></div>
+                        <div class="dar-npt-list" data-dar="npt-list"></div>
+                    </div>
                     <div class="dar-tab-panel" data-panel="playback">
                         <div class="dar-section">
                             <div class="dar-section-title">Mode</div>
@@ -192,6 +204,7 @@ function buildModal() {
                             <span class="dar-bulk-count" data-dar="lib-bulk-count">0 selected</span>
                             <button class="dar-bulk-btn" data-dar="lib-bulk-selectall" type="button"><i class="fa-solid fa-list-check"></i> Select visible</button>
                             <button class="dar-bulk-btn" data-dar="lib-bulk-tag" type="button"><i class="fa-solid fa-tags"></i> Add tags</button>
+                            <button class="dar-bulk-btn" data-dar="lib-bulk-queue" type="button"><i class="fa-solid fa-play"></i> Queue</button>
                             <button class="dar-bulk-btn dar-bulk-btn--ghost" data-dar="lib-bulk-clear" type="button"><i class="fa-solid fa-xmark"></i> Clear</button>
                         </div>
                         <div class="dar-track-list" data-dar="lib-list">
@@ -294,6 +307,7 @@ function buildModal() {
 
     // Wire each section to live data + events
     wireNowPlaying();
+    wireNowPlayingTab();
     wirePlaybackTab();
     wireLibraryTab();
     wirePlaylistsTab();
@@ -312,6 +326,8 @@ let $npProgressFill = null;
 let $npProgress = null;
 let $npPlayPauseIcon = null;
 let $npLoopBtn = null;
+let $npVolumeBtn = null;
+let $npVolumeIcon = null;
 
 /**
  * Wire the now-playing strip: transport buttons, progress scrubber,
@@ -329,6 +345,8 @@ function wireNowPlaying() {
     $npProgress     = q('np-progress');
     $npPlayPauseIcon = q('np-playpause')?.querySelector('i');
     $npLoopBtn      = q('np-loop');
+    $npVolumeBtn    = q('np-volume');
+    $npVolumeIcon   = $npVolumeBtn?.querySelector('i');
 
     // ---- Transport buttons ----
     $(q('np-prev')).on('click', () => {
@@ -364,6 +382,33 @@ function wireNowPlaying() {
         debugLog(`Loop toggled: ${extension_settings.audio.loop_single}`);
     });
 
+    $(q('np-volume')).on('click', () => {
+        const muted = !extension_settings.audio.bgm_muted;
+        extension_settings.audio.bgm_muted = muted;
+        const audioEl = $('#audio_bgm')[0];
+        if (audioEl) audioEl.muted = muted;
+        syncVolumeIcon();
+        // Keep miniplayer in sync too
+        updateMiniplayerContent();
+        saveSettingsDebounced();
+    });
+
+    // Volume popup on hover (vertical slider below the button — the strip
+    // is at the top of the modal so we force downward placement).
+    const volumeBtn = q('np-volume');
+    if (volumeBtn) {
+        volumeBtn.addEventListener('mouseenter', () => {
+            showVolumePopup(volumeBtn, {
+                value: extension_settings.audio.bgm_volume ?? 50,
+                onChange: onModalVolumeSliderChange,
+                preferBelow: true,
+            });
+        });
+        volumeBtn.addEventListener('mouseleave', () => {
+            hideVolumePopup();
+        });
+    }
+
     // ---- Audio element listeners ----
     const audio = $('#audio_bgm')[0];
     if (audio) {
@@ -377,6 +422,8 @@ function wireNowPlaying() {
         audio.addEventListener('ended', () => {
             syncPlayPauseIcon();
         });
+        // Sync volume icon when muted state changes (e.g. from miniplayer)
+        audio.addEventListener('volumechange', syncVolumeIcon);
     }
 
     // ---- Click-to-seek on progress bar ----
@@ -399,6 +446,7 @@ function wireNowPlaying() {
     refreshNowPlaying();
     syncPlayPauseIcon();
     syncLoopButton();
+    syncVolumeIcon();
 }
 
 /**
@@ -448,6 +496,296 @@ function syncPlayPauseIcon() {
 function syncLoopButton() {
     if (!$npLoopBtn) return;
     $npLoopBtn.classList.toggle('active', !!extension_settings.audio.loop_single);
+}
+
+/**
+ * Sync the volume/mute button icon to match current mute + volume state.
+ * Mirrors the icon logic in miniplayer.js applyVolumeIcon().
+ */
+function syncVolumeIcon() {
+    if (!$npVolumeIcon) return;
+    const volume = extension_settings.audio.bgm_volume;
+    let icon;
+    if (extension_settings.audio.bgm_muted || volume === 0) {
+        icon = 'fa-volume-mute';
+    } else if (volume < 50) {
+        icon = 'fa-volume-low';
+    } else {
+        icon = 'fa-volume-high';
+    }
+    $npVolumeIcon.classList.remove('fa-volume-high', 'fa-volume-low', 'fa-volume-mute');
+    $npVolumeIcon.classList.add(icon);
+    // Toggle active class so the button highlights when muted (visual cue)
+    if ($npVolumeBtn) $npVolumeBtn.classList.toggle('active', !!extension_settings.audio.bgm_muted);
+}
+
+/**
+ * Callback for the shared volume popup slider (modal side). Updates the
+ * volume setting + audio element, auto-unmutes on non-zero drag, syncs
+ * icons in both the modal and the miniplayer, and saves.
+ */
+function onModalVolumeSliderChange(vol) {
+    extension_settings.audio.bgm_volume = vol;
+
+    const audioEl = $('#audio_bgm')[0];
+    if (audioEl) {
+        audioEl.volume = vol / 100;
+        // Auto-unmute when the user actively raises volume from the slider
+        if (vol > 0 && extension_settings.audio.bgm_muted) {
+            extension_settings.audio.bgm_muted = false;
+            audioEl.muted = false;
+        }
+    }
+
+    syncVolumeIcon();
+    updateMiniplayerContent();
+    saveSettingsDebounced();
+}
+
+// ----------------------------------------------------------------------
+// Now Playing Tab
+// ----------------------------------------------------------------------
+
+let $nptHeader = null;
+let $nptList = null;
+
+/**
+ * Wire the Now Playing tab — header actions, track row click handlers,
+ * and reactive re-render on queue/playback/mode changes.
+ * Called once at the end of buildModal().
+ */
+function wireNowPlayingTab() {
+    const q = (attr) => modalRoot.querySelector(`[data-dar="${attr}"]`);
+    $nptHeader = q('npt-header');
+    $nptList   = q('npt-list');
+
+    // Header actions (clear queue button — rendered dynamically)
+    $nptHeader.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-dar="npt-clear-queue"]');
+        if (btn) {
+            clearQueue();
+            renderNowPlaying();
+        }
+    });
+
+    // Track list — delegated handler for row clicks + remove button
+    $nptList.addEventListener('click', (e) => {
+        const row = e.target.closest('.dar-npt-row');
+        if (!row) return;
+        const index = parseInt(row.dataset.index, 10);
+        const path = row.dataset.path;
+
+        // Remove button (queue mode only)
+        const removeBtn = e.target.closest('[data-action="npt-remove"]');
+        if (removeBtn) {
+            e.stopPropagation();
+            removeFromQueue(index);
+            renderNowPlaying();
+            return;
+        }
+
+        // Default: click to play
+        if (!path) return;
+        ensureAudioEnabled();
+        if (isQueueActive()) {
+            playQueueTrack(index);
+        } else {
+            playTrack(path);
+        }
+    });
+
+    // Reactive re-render
+    audioEvents.addEventListener('queueChanged',      renderNowPlaying);
+    audioEvents.addEventListener('nowPlayingChanged',  renderNowPlaying);
+    audioEvents.addEventListener('modeChanged',        renderNowPlaying);
+    audioEvents.addEventListener('playlistsChanged',   renderNowPlaying);
+    audioEvents.addEventListener('tracksScanned',      renderNowPlaying);
+
+    renderNowPlaying();
+}
+
+/**
+ * Resolve the current eligible track list mirroring selectTrack()'s logic
+ * so the Now Playing tab shows exactly what the player considers eligible.
+ * @returns {{ tracks: string[], label: string, isPlaylist: boolean, playlistName: string|null }}
+ */
+function resolveCurrentContext() {
+    const mode = extension_settings.audio.mode;
+    const context = getContext();
+    const characterName = context.name2;
+
+    if (mode === 'playlist') {
+        const playlistName = extension_settings.audio.active_playlist;
+        const playlist = extension_settings.audio.playlists?.[playlistName];
+        if (!playlist) return { tracks: [], label: 'No playlist selected', isPlaylist: true, playlistName: null };
+
+        let tracks;
+        if (playlist.type === 'manual') {
+            tracks = playlist.tracks || [];
+        } else {
+            const tags = [...(playlist.tags || [])];
+            const includeGlobal = playlist.include_global !== false;
+            if (playlist.emotion_mode === 'auto') tags.push(playbackState.currentEmotion);
+            else if (playlist.emotion_mode === 'manual' && playlist.emotion_override) tags.push(playlist.emotion_override);
+            try { tracks = filterTracksByTags(tags, characterName, includeGlobal); }
+            catch { tracks = []; }
+        }
+        return { tracks, label: playlistName, isPlaylist: true, playlistName };
+    }
+
+    if (mode === 'instrumental') {
+        const tags = ['instrumental'];
+        const includeGlobal = extension_settings.audio.instrumental_include_global !== false;
+        if (extension_settings.audio.emotion_detection) tags.push(playbackState.currentEmotion);
+        let tracks = filterTracksByTags(tags, characterName, includeGlobal);
+        if (tracks.length === 0) tracks = filterTracksByTags(['instrumental'], characterName, includeGlobal);
+
+        const detail = extension_settings.audio.emotion_detection ? playbackState.currentEmotion : '';
+        const label = detail ? `Instrumental · ${detail}` : 'Instrumental';
+        return { tracks, label, isPlaylist: false, playlistName: null };
+    }
+
+    // songs mode
+    const emotionFilter = extension_settings.audio.songs_emotion_filter;
+    const includeGlobal = extension_settings.audio.songs_include_global !== false;
+    let tracks;
+
+    if (emotionFilter && emotionFilter !== 'all') {
+        tracks = filterTracksByTags([emotionFilter], characterName, includeGlobal);
+    } else {
+        tracks = [];
+        if (includeGlobal) {
+            tracks = [...trackLibrary.global];
+            if (characterName && trackLibrary.character[characterName]) {
+                tracks = [...trackLibrary.character[characterName], ...tracks];
+            }
+        } else if (characterName && trackLibrary.character[characterName]) {
+            tracks = [...trackLibrary.character[characterName]];
+        }
+        tracks = [...trackLibrary.imported, ...tracks];
+    }
+
+    const filterLabel = emotionFilter && emotionFilter !== 'all'
+        ? emotionFilter.charAt(0).toUpperCase() + emotionFilter.slice(1)
+        : 'All';
+    return { tracks, label: `Songs · ${filterLabel}`, isPlaylist: false, playlistName: null };
+}
+
+/**
+ * Render the Now Playing tab. Content adapts to the active context:
+ *   - Queue active → queue tracks with position, remove buttons
+ *   - Playlist mode → resolved playlist tracks
+ *   - Songs/Instrumental → eligible track pool
+ *   - Nothing → helpful empty state
+ */
+function renderNowPlaying() {
+    if (!$nptHeader || !$nptList) return;
+
+    const qActive = isQueueActive();
+    let tracks, headerHtml, showRemove;
+
+    if (qActive) {
+        tracks = playbackState.playQueue;
+        showRemove = true;
+        headerHtml = `
+            <div class="dar-npt-context">
+                <i class="fa-solid fa-list-ol"></i>
+                <span>Queue · ${tracks.length} track${tracks.length !== 1 ? 's' : ''}</span>
+            </div>
+            <button class="dar-text-btn" data-dar="npt-clear-queue" type="button"><i class="fa-solid fa-xmark"></i> Clear</button>
+        `;
+    } else {
+        const ctx = resolveCurrentContext();
+        tracks = ctx.tracks;
+        showRemove = false;
+
+        const icon = ctx.isPlaylist ? 'fa-record-vinyl' : 'fa-music';
+        const countLabel = ctx.isPlaylist
+            ? `${tracks.length} track${tracks.length !== 1 ? 's' : ''}`
+            : `${tracks.length} eligible`;
+        const displayLabel = ctx.isPlaylist && ctx.playlistName
+            ? escapeHtml(ctx.playlistName)
+            : ctx.label;
+
+        headerHtml = `
+            <div class="dar-npt-context">
+                <i class="fa-solid ${icon}"></i>
+                <span>${displayLabel} · ${countLabel}</span>
+            </div>
+        `;
+    }
+
+    $nptHeader.innerHTML = headerHtml;
+
+    // Empty state
+    if (tracks.length === 0) {
+        const hint = playbackState.currentTrack
+            ? 'No tracks match the current mode or filter.'
+            : 'Select tracks in the Library tab and click <strong>Queue</strong>, or start playback in any mode.';
+        $nptList.innerHTML = `<div class="dar-placeholder">${hint}</div>`;
+        return;
+    }
+
+    // Build track rows
+    const rowsHtml = tracks.map((path, index) => {
+        const meta = trackLibrary.metadata[path] || {};
+        const filename = path.split('/').pop();
+        const rawTitle = meta.title || decodeURIComponent(filename.replace(/\.[^.]+$/, ''));
+        const isCurrent = playbackState.currentTrack === path;
+        const isQueueCurrent = qActive && index === playbackState.queueIndex;
+        const highlight = isCurrent || isQueueCurrent;
+
+        const posHtml = highlight
+            ? `<span class="dar-eq"><span></span><span></span><span></span><span></span></span>`
+            : `<span class="dar-npt-pos-num">${index + 1}</span>`;
+
+        // Source hint
+        const isGlobal = (trackLibrary.global || []).includes(path);
+        const isImported = (trackLibrary.imported || []).includes(path);
+        let sourceHint = '';
+        if (isGlobal) sourceHint = 'global';
+        else if (isImported) sourceHint = 'imported';
+        else {
+            for (const [char, charTracks] of Object.entries(trackLibrary.character || {})) {
+                if (charTracks.includes(path)) { sourceHint = char; break; }
+            }
+        }
+
+        // Tag chips — show everything (instrumental + emotions + custom).
+        // NP tab has no other tag context, so the full set is most useful.
+        const tags = meta.tags || [];
+        const tagsHtml = tags.length > 0
+            ? `<div class="dar-npt-tags">${
+                tags.map(t => `<span class="dar-tag">${escapeHtml(t)}</span>`).join('')
+              }</div>`
+            : '<div class="dar-npt-tags"></div>';
+
+        const removeHtml = showRemove
+            ? `<button class="dar-icon-btn" data-action="npt-remove" type="button" title="Remove"><i class="fa-solid fa-xmark"></i></button>`
+            : '';
+
+        const rowClass = highlight ? 'dar-npt-row current' : 'dar-npt-row';
+
+        return `
+            <div class="${rowClass}" data-path="${escapeHtml(path)}" data-index="${index}">
+                <div class="dar-npt-pos">${posHtml}</div>
+                <div class="dar-npt-info">
+                    <div class="dar-npt-title">${escapeHtml(rawTitle)}</div>
+                    <div class="dar-npt-sub">${escapeHtml(sourceHint)}</div>
+                </div>
+                ${tagsHtml}
+                <div class="dar-npt-actions">${removeHtml}</div>
+            </div>
+        `;
+    }).join('');
+
+    $nptList.innerHTML = rowsHtml;
+
+    // Scroll current track into view (smooth, non-disruptive)
+    requestAnimationFrame(() => {
+        const currentRow = $nptList.querySelector('.dar-npt-row.current');
+        if (currentRow) currentRow.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    });
 }
 
 // ----------------------------------------------------------------------
@@ -705,6 +1043,19 @@ function wireLibraryTab() {
         } else if (which === 'lib-bulk-tag') {
             if (playbackState.selectedTracks.size === 0) return;
             openBulkTagEditor();
+        } else if (which === 'lib-bulk-queue') {
+            if (playbackState.selectedTracks.size === 0) return;
+            const paths = Array.from(playbackState.selectedTracks);
+            const shouldAutoPlay = addToQueue(paths);
+            if (shouldAutoPlay) {
+                ensureAudioEnabled();
+                playTrack(playbackState.playQueue[0]);
+            }
+            playbackState.selectedTracks.clear();
+            playbackState.lastSelectedIndex = -1;
+            renderLibrary();
+            switchTab('nowplaying');
+            darToast.success(`Added ${paths.length} track${paths.length === 1 ? '' : 's'} to queue`);
         } else if (which === 'lib-bulk-clear') {
             playbackState.selectedTracks.clear();
             playbackState.lastSelectedIndex = -1;
@@ -749,6 +1100,13 @@ function wireLibraryTab() {
             if (action === 'play') {
                 ensureAudioEnabled();
                 playTrack(path);
+            } else if (action === 'queue') {
+                const shouldAutoPlay = addToQueue([path]);
+                if (shouldAutoPlay) {
+                    ensureAudioEnabled();
+                    playTrack(playbackState.playQueue[0]);
+                }
+                darToast.success('Added to queue');
             } else if (action === 'autotag-single') {
                 autoTagSingle(path);
             } else if (action === 'edit') {
@@ -888,10 +1246,12 @@ function renderLibrary() {
         // Untagged rows expose a wand button for quick auto-tagging access
         const actionsHtml = isUntagged
             ? `<button class="dar-icon-btn" data-action="play"            type="button" title="Play"><i class="fa-solid fa-play"></i></button>
+               <button class="dar-icon-btn" data-action="queue"           type="button" title="Add to queue"><i class="fa-solid fa-list-ol"></i></button>
                <button class="dar-icon-btn" data-action="autotag-single" type="button" title="Tag this track"><i class="fa-solid fa-wand-magic-sparkles"></i></button>
                <button class="dar-icon-btn" data-action="edit"           type="button" title="Edit"><i class="fa-solid fa-pen"></i></button>`
-            : `<button class="dar-icon-btn" data-action="play" type="button" title="Play"><i class="fa-solid fa-play"></i></button>
-               <button class="dar-icon-btn" data-action="edit" type="button" title="Edit"><i class="fa-solid fa-pen"></i></button>`;
+            : `<button class="dar-icon-btn" data-action="play"  type="button" title="Play"><i class="fa-solid fa-play"></i></button>
+               <button class="dar-icon-btn" data-action="queue" type="button" title="Add to queue"><i class="fa-solid fa-list-ol"></i></button>
+               <button class="dar-icon-btn" data-action="edit"  type="button" title="Edit"><i class="fa-solid fa-pen"></i></button>`;
 
         const rowClasses = [
             'dar-track-row',
@@ -1382,7 +1742,9 @@ export function openAudioModal() {
     refreshNowPlaying();
     syncPlayPauseIcon();
     syncLoopButton();
+    syncVolumeIcon();
     refreshPlaybackTab();
+    renderNowPlaying();
     renderLibrary();
     renderPlaylists();
     refreshPreferencesTab();

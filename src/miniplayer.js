@@ -27,6 +27,7 @@ import { extension_settings } from '../../../../extensions.js';
 import { playbackState, audioEvents, debugLog } from './state.js';
 import { onSkipTrack } from './player.js';
 import { openAudioModal } from './audioModal.js';
+import { showVolumePopup, hideVolumePopup } from './ui.js';
 
 // ---- Layout constants ------------------------------------------------
 const MP_WIDTH = 170;         // matches .dar-miniplayer width in style.css
@@ -96,6 +97,18 @@ function wireMiniplayerControls(mp) {
 
         applyVolumeIcon();
         saveSettingsDebounced();
+    });
+
+    // Volume popup on hover
+    const muteBtn = mp.querySelector('#miniplayer_mute');
+    muteBtn.addEventListener('mouseenter', () => {
+        showVolumePopup(muteBtn, {
+            value: extension_settings.audio.bgm_volume ?? 50,
+            onChange: onVolumeSliderChange,
+        });
+    });
+    muteBtn.addEventListener('mouseleave', () => {
+        hideVolumePopup();
     });
 
     // Click-to-seek on progress bar (matches now-playing scrubber pattern in audioModal.js).
@@ -290,6 +303,28 @@ function applyVolumeIcon() {
     }
 }
 
+/**
+ * Callback for the shared volume popup slider. Updates the volume setting,
+ * applies it to the <audio> element, auto-unmutes if the user drags above 0,
+ * and saves.
+ */
+function onVolumeSliderChange(vol) {
+    extension_settings.audio.bgm_volume = vol;
+
+    const audioEl = document.getElementById('audio_bgm');
+    if (audioEl) {
+        audioEl.volume = vol / 100;
+        // Auto-unmute when the user actively raises volume from the slider
+        if (vol > 0 && extension_settings.audio.bgm_muted) {
+            extension_settings.audio.bgm_muted = false;
+            audioEl.muted = false;
+        }
+    }
+
+    applyVolumeIcon();
+    saveSettingsDebounced();
+}
+
 // ---- Event subscriptions ---------------------------------------------
 
 // Refresh mute icon on track changes (in case track-specific volume logic
@@ -297,6 +332,13 @@ function applyVolumeIcon() {
 audioEvents.addEventListener('nowPlayingChanged', () => {
     updateMiniplayerContent();
 });
+
+// Keep the volume icon in sync when volume/mute is changed elsewhere
+// (e.g. from the modal's volume popup or slider).
+const _bgmAudio = document.getElementById('audio_bgm');
+if (_bgmAudio) {
+    _bgmAudio.addEventListener('volumechange', () => applyVolumeIcon());
+}
 
 // Re-clamp position when the viewport changes so the miniplayer never
 // ends up off-screen after a resize.

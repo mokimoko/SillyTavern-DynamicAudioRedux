@@ -184,3 +184,158 @@ export function darConfirm(message, opts = {}) {
         });
     });
 }
+
+
+/* ======================= Volume Popup ================================== */
+/*
+ * Shared hover-activated volume slider. A single popup element attached to
+ * document.body with position:fixed so it escapes any overflow:hidden
+ * containers (miniplayer, modal). Call showVolumePopup(anchorEl, opts) on
+ * mouseenter and hideVolumePopup() on mouseleave.
+ *
+ * Custom div-based vertical slider — no native <input type="range">, no
+ * rotation hacks, no Chromium pseudo-element quirks.
+ */
+
+let _volumePopup = null;
+let _volumeHideTimer = null;
+let _volumeOnChange = null;
+
+function getOrCreateVolumePopup() {
+    if (_volumePopup) return _volumePopup;
+
+    const el = document.createElement('div');
+    el.className = 'dar-volume-popup';
+    el.innerHTML = `
+        <div class="dar-volume-slider-wrap">
+            <div class="dar-volume-slider-track">
+                <div class="dar-volume-slider-fill"></div>
+            </div>
+            <div class="dar-volume-slider-thumb"></div>
+        </div>
+        <span class="dar-volume-popup-label">50</span>
+    `;
+    document.body.appendChild(el);
+
+    const wrap  = el.querySelector('.dar-volume-slider-wrap');
+    const fill  = el.querySelector('.dar-volume-slider-fill');
+    const thumb = el.querySelector('.dar-volume-slider-thumb');
+    const label = el.querySelector('.dar-volume-popup-label');
+
+    // Internal volume state lives on the popup element
+    el._darVolume = 50;
+
+    function setVolume(vol) {
+        vol = Math.max(0, Math.min(100, Math.round(vol)));
+        el._darVolume = vol;
+        const pct = vol + '%';
+        fill.style.height = pct;
+        thumb.style.bottom = pct;
+        label.textContent = vol;
+        if (_volumeOnChange) _volumeOnChange(vol);
+    }
+
+    function volFromY(clientY) {
+        const rect = wrap.getBoundingClientRect();
+        // Bottom of track = 0%, top = 100%
+        return ((rect.bottom - clientY) / rect.height) * 100;
+    }
+
+    // Click + drag
+    wrap.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        setVolume(volFromY(e.clientY));
+        const onMove = (e2) => { e2.preventDefault(); setVolume(volFromY(e2.clientY)); };
+        const onUp   = ()   => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+    });
+
+    // Scroll wheel for fine adjustment
+    wrap.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const step = e.deltaY < 0 ? 2 : -2;   // scroll up = louder
+        setVolume(el._darVolume + step);
+    }, { passive: false });
+
+    // Keep popup visible when the cursor moves into it
+    el.addEventListener('mouseenter', () => clearTimeout(_volumeHideTimer));
+    el.addEventListener('mouseleave', () => hideVolumePopup());
+
+    _volumePopup = el;
+    return el;
+}
+
+/**
+ * Show the volume popup anchored to a button.
+ *
+ * @param {HTMLElement} anchorEl — the button to anchor to
+ * @param {object} opts
+ * @param {number}  opts.value       — current volume 0–100
+ * @param {(v:number)=>void} opts.onChange — called on every slider input
+ * @param {boolean} opts.preferBelow — force popup below the anchor (for the
+ *     modal where the button is at the top). Default false = auto-detect
+ *     based on available viewport space (good for the miniplayer).
+ */
+export function showVolumePopup(anchorEl, { value = 50, onChange = null, preferBelow = false } = {}) {
+    clearTimeout(_volumeHideTimer);
+    const popup = getOrCreateVolumePopup();
+
+    const fill  = popup.querySelector('.dar-volume-slider-fill');
+    const thumb = popup.querySelector('.dar-volume-slider-thumb');
+    const label = popup.querySelector('.dar-volume-popup-label');
+    const pct = value + '%';
+    fill.style.height = pct;
+    thumb.style.bottom = pct;
+    label.textContent = value;
+    popup._darVolume = value;
+    _volumeOnChange = onChange;
+
+    popup.style.display = 'flex';
+
+    // Position using viewport coords (fixed positioning).
+    const rect = anchorEl.getBoundingClientRect();
+    const popupW = popup.offsetWidth;
+    const popupH = popup.offsetHeight;
+
+    // Horizontal — center on the anchor, clamp to viewport edges
+    let left = rect.left + rect.width / 2 - popupW / 2;
+    left = Math.max(4, Math.min(left, window.innerWidth - popupW - 4));
+
+    // Vertical — decide above vs below
+    const spaceAbove = rect.top;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    let top;
+
+    if (preferBelow) {
+        // Modal mode: always below
+        top = rect.bottom + 6;
+    } else {
+        // Miniplayer mode: pick whichever side has more room
+        if (spaceAbove >= popupH + 8) {
+            top = rect.top - popupH - 6;
+        } else if (spaceBelow >= popupH + 8) {
+            top = rect.bottom + 6;
+        } else {
+            // Tight on both sides — favour whichever has more
+            top = spaceAbove > spaceBelow
+                ? rect.top - popupH - 6
+                : rect.bottom + 6;
+        }
+    }
+
+    // Final clamp so nothing goes off-screen
+    top = Math.max(4, Math.min(top, window.innerHeight - popupH - 4));
+
+    popup.style.left = left + 'px';
+    popup.style.top = top + 'px';
+}
+
+/**
+ * Hide the volume popup (with a short delay so the cursor can travel to it).
+ */
+export function hideVolumePopup() {
+    _volumeHideTimer = setTimeout(() => {
+        if (_volumePopup) _volumePopup.style.display = 'none';
+    }, 200);
+}

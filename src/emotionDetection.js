@@ -10,6 +10,7 @@ import {
     EMOTION_TAGS,
     playbackState,
     debugLog,
+    isQueueActive,
 } from './state.js';
 import { scanTracks } from './scanner.js';
 import { selectTrack, playTrack } from './player.js';
@@ -80,6 +81,9 @@ export async function moduleWorker() {
     if (newEmotion !== playbackState.currentEmotion) {
         playbackState.currentEmotion = newEmotion;
         debugLog(`Emotion changed to: ${playbackState.currentEmotion}`);
+
+        // Don't auto-switch tracks while the user's queue is playing
+        if (isQueueActive()) return;
 
         if (playbackState.cooldownTimer <= 0 && !extension_settings.audio.loop_single) {
             const track = selectTrack();

@@ -152,6 +152,7 @@
 }
 .dar-np-progress:hover .dar-np-progress-fill { background: var(--dar-text-primary); }
 .dar-np-controls { display: flex; gap: 2px; }
+.dar-np-controls [data-dar="np-volume"] { margin-left: 4px; }
 
 /* ---------- Universal icon button ------------------------------------- */
 .dar-icon-btn {
@@ -1599,4 +1600,227 @@
 .dar-folder-more {
     color: var(--dar-text-muted);
     font-style: italic;
+}
+
+
+/* =========================================================================
+   Now Playing Tab
+   ========================================================================= */
+
+.dar-npt-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--dar-border-hairline);
+}
+.dar-npt-context {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--dar-text-primary);
+}
+.dar-npt-context i {
+    font-size: 10px;
+    color: var(--dar-text-muted);
+}
+
+/* Track list container */
+.dar-npt-list {
+    display: flex;
+    flex-direction: column;
+}
+
+/* Individual track row */
+.dar-npt-row {
+    display: grid;
+    grid-template-columns: 28px 1fr auto auto;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 8px;
+    cursor: pointer;
+    border-bottom: 1px solid var(--dar-border-hairline);
+    transition: background var(--dar-t-fast);
+    position: relative;
+}
+.dar-npt-row:hover { background: var(--dar-bg-hover); }
+.dar-npt-row.current { background: var(--dar-bg-current); }
+
+.dar-npt-row.current::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: var(--dar-accent);
+}
+
+/* Position number */
+.dar-npt-pos {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 20px;
+}
+.dar-npt-pos-num {
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    color: var(--dar-text-muted);
+}
+.dar-npt-row:hover .dar-npt-pos-num { color: var(--dar-text-secondary); }
+.dar-npt-row.current .dar-npt-pos .dar-eq { /* inherits equalizer styles */ }
+
+/* Track info */
+.dar-npt-info { min-width: 0; }
+.dar-npt-title {
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--dar-text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 2px;
+}
+.dar-npt-row.current .dar-npt-title { font-weight: 500; }
+.dar-npt-sub {
+    font-size: 10px;
+    color: var(--dar-text-muted);
+}
+
+/* Tag chips — own grid column, right side of the row. Mirrors .dar-track-tags
+   from the Library tab: no wrap, max-width with overflow truncation. */
+.dar-npt-tags {
+    display: flex;
+    gap: 3px;
+    flex-wrap: nowrap;
+    max-width: 260px;
+    overflow: hidden;
+}
+.dar-npt-tags .dar-tag {
+    cursor: default;
+}
+/* Disable hover state — tags aren't interactive in this context */
+.dar-npt-tags .dar-tag:hover {
+    background: var(--dar-bg-elevated);
+    color: var(--dar-text-secondary);
+}
+
+/* Actions (remove button etc.) */
+.dar-npt-actions {
+    display: flex;
+    gap: 0;
+    opacity: 0;
+    transition: opacity var(--dar-t-fast);
+}
+.dar-npt-row:hover .dar-npt-actions { opacity: 1; }
+.dar-npt-actions .dar-icon-btn {
+    width: 22px;
+    height: 22px;
+    font-size: 10px;
+}
+
+
+/* =========================================================================
+   Volume Popup — hover-reveal vertical slider (shared by miniplayer + modal)
+   -------------------------------------------------------------------------
+   Single popup element on document.body, positioned with position:fixed
+   so it escapes overflow:hidden containers. z-index sits above everything
+   including ST popups so the slider is always interactive.
+
+   Custom div-based vertical slider (track + fill + thumb). No native
+   <input type="range">, no rotation hacks, no browser quirks.
+   ========================================================================= */
+
+.dar-volume-popup {
+    position: fixed;
+    z-index: 10001;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 8px 5px 6px;
+    background: rgba(0, 0, 0, 0.88);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--dar-radius-sm, 4px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+    pointer-events: auto;
+    animation: dar-volume-popup-in 120ms ease;
+}
+
+@keyframes dar-volume-popup-in {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.dar-volume-popup-label {
+    font-size: 10px;
+    font-variant-numeric: tabular-nums;
+    color: var(--dar-text-secondary, rgba(212, 212, 214, 0.55));
+    min-width: 20px;
+    text-align: center;
+    user-select: none;
+}
+
+/* ---------- Custom div-based vertical slider -------------------------- */
+/* No native <input>, no rotation hacks, no Chromium pseudo-element bugs.
+   Track = thin bar, Fill = active portion from bottom, Thumb = circle. */
+.dar-volume-slider-wrap {
+    width: 20px;
+    height: 100px;
+    position: relative;
+    cursor: pointer;
+    flex-shrink: 0;
+    touch-action: none;
+}
+
+.dar-volume-slider-track {
+    position: absolute;
+    left: 50%;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    transform: translateX(-50%);
+    background: rgba(255, 255, 255, 0.12);
+    border-radius: 1.5px;
+    overflow: hidden;
+}
+
+.dar-volume-slider-fill {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 50%;
+    background: var(--dar-text-primary, #d4d4d6);
+    border-radius: 1.5px;
+    pointer-events: none;
+}
+
+.dar-volume-slider-thumb {
+    position: absolute;
+    left: 50%;
+    bottom: 50%;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--dar-text-primary, #d4d4d6);
+    border: none;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+    /* Center horizontally on track; shift down so thumb center aligns with bottom edge */
+    transform: translate(-50%, 50%);
+    pointer-events: none;
+    transition: background 80ms ease;
+}
+.dar-volume-slider-wrap:hover .dar-volume-slider-thumb {
+    background: #fff;
+}
+.dar-volume-slider-wrap:active .dar-volume-slider-thumb {
+    background: #fff;
 }

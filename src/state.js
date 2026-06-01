@@ -88,6 +88,7 @@ export const playbackState = {
     previousTrack: null,
     currentEmotion: 'neutral',
     playQueue: [],
+    queueIndex: -1,         // current position in playQueue; -1 = queue inactive
     cooldownTimer: 0,
     lastSkipDirection: 'forward',
     isSeeking: false,
@@ -96,12 +97,20 @@ export const playbackState = {
     lastSelectedIndex: -1,
 };
 
+/**
+ * @returns {boolean} true when a user-initiated queue is active.
+ */
+export function isQueueActive() {
+    return playbackState.playQueue.length > 0 && playbackState.queueIndex >= 0;
+}
+
 // Event bus — cross-module notifications without circular imports.
 // Dispatched events:
 //   'tracksScanned'       — after scanTracks completes (trackLibrary populated)
 //   'trackListChanged'    — anything affecting visible track list/highlight
 //   'nowPlayingChanged'   — after playTrack succeeds (detail: { trackPath })
 //   'playlistsChanged'    — after playlist CRUD
+//   'queueChanged'        — after queue add/remove/clear
 //   'modeChanged'         — after mode toggle (detail: { mode })
 //   'miniplayerVisibilityChanged' — after enable/disable
 export const audioEvents = new EventTarget();

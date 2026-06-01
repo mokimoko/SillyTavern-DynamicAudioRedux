@@ -11,6 +11,7 @@ import {
     playbackState,
     audioEvents,
     debugLog,
+    isQueueActive,
 } from './state.js';
 
 export function filterTracksByTags(tags, characterName = null, includeGlobal = true) {
@@ -217,18 +218,111 @@ export function formatTime(seconds) {
 
 // ----- Transport-control handlers (used by miniplayer, slash commands, audio modal) -----
 
-export function onSkipTrack() {
+/**
+ * Advance to the next track, respecting the queue if active.
+ * Called by onSkipTrack + the ended handler in index.js.
+ * @returns {boolean} true if a track was played.
+ */
+export function advanceToNextTrack() {
+    if (isQueueActive()) {
+        const nextIndex = playbackState.queueIndex + 1;
+        if (nextIndex < playbackState.playQueue.length) {
+            playbackState.queueIndex = nextIndex;
+            playTrack(playbackState.playQueue[nextIndex]);
+            return true;
+        }
+        // Queue exhausted — clear and fall through to mode-based selection
+        clearQueue();
+    }
     const track = selectTrack(true);
     if (track) {
         playTrack(track);
+        return true;
+    }
+    return false;
+}
+
+export function onSkipTrack() {
+    if (advanceToNextTrack()) {
         playbackState.cooldownTimer = extension_settings.audio.cooldown * 1000;
     }
 }
 
 export function onPreviousTrack() {
+    if (isQueueActive() && playbackState.queueIndex > 0) {
+        playbackState.queueIndex--;
+        playTrack(playbackState.playQueue[playbackState.queueIndex]);
+        return;
+    }
+    // Non-queue fallback: swap with previous track
     if (playbackState.previousTrack) {
         const temp = playbackState.currentTrack;
         playTrack(playbackState.previousTrack);
         playbackState.previousTrack = temp;
     }
+}
+
+// ----- Queue management -----
+
+/**
+ * Append tracks to the play queue. If the queue was empty, initializes
+ * queueIndex to 0. Does NOT auto-play — callers handle that.
+ * @param {string[]} paths - Track paths to add.
+ * @returns {boolean} true if the queue was just initialized (was empty before).
+ */
+export function addToQueue(paths) {
+    if (!paths || paths.length === 0) return false;
+    const wasEmpty = playbackState.playQueue.length === 0;
+    playbackState.playQueue.push(...paths);
+
+    if (wasEmpty) {
+        playbackState.queueIndex = 0;
+    }
+
+    audioEvents.dispatchEvent(new CustomEvent('queueChanged'));
+    debugLog(`Added ${paths.length} tracks to queue (total: ${playbackState.playQueue.length})`);
+    return wasEmpty;
+}
+
+/**
+ * Remove a single track from the queue by index.
+ * Adjusts queueIndex to keep the "current" position correct.
+ */
+export function removeFromQueue(index) {
+    if (index < 0 || index >= playbackState.playQueue.length) return;
+
+    const wasCurrentTrack = index === playbackState.queueIndex;
+    playbackState.playQueue.splice(index, 1);
+
+    if (playbackState.playQueue.length === 0) {
+        playbackState.queueIndex = -1;
+    } else if (index < playbackState.queueIndex) {
+        // Removed a track before the current — shift index back
+        playbackState.queueIndex--;
+    } else if (wasCurrentTrack && playbackState.queueIndex >= playbackState.playQueue.length) {
+        // Removed the last item while it was current — clamp to end
+        playbackState.queueIndex = playbackState.playQueue.length - 1;
+    }
+
+    audioEvents.dispatchEvent(new CustomEvent('queueChanged'));
+    debugLog(`Removed queue track at index ${index} (remaining: ${playbackState.playQueue.length})`);
+}
+
+/**
+ * Clear the queue entirely.
+ */
+export function clearQueue() {
+    playbackState.playQueue = [];
+    playbackState.queueIndex = -1;
+    audioEvents.dispatchEvent(new CustomEvent('queueChanged'));
+    debugLog('Queue cleared');
+}
+
+/**
+ * Jump to a specific position in the queue and play it.
+ */
+export function playQueueTrack(index) {
+    if (index < 0 || index >= playbackState.playQueue.length) return;
+    playbackState.queueIndex = index;
+    playTrack(playbackState.playQueue[index]);
 }

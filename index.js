@@ -26,6 +26,7 @@ import { initDataStore } from './src/dataStore.js';
 import {
     selectTrack,
     playTrack,
+    advanceToNextTrack,
 } from './src/player.js';
 import { moduleWorker } from './src/emotionDetection.js';
 import {
@@ -97,8 +98,7 @@ jQuery(async () => {
     // Track-ended → auto-advance unless single-loop is on
     $('#audio_bgm').on('ended', () => {
         if (!extension_settings.audio.loop_single) {
-            const track = selectTrack(true);
-            if (track) playTrack(track);
+            advanceToNextTrack();
         }
     });
 
