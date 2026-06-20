@@ -269,8 +269,14 @@ export function openFolderImportModal() {
 
             darToast.success(`Registered "${folderName}" (${tracks.length} track${tracks.length === 1 ? '' : 's'})`);
 
-            await scanTracks();
+            // Registration is already committed to the dataStore at this point,
+            // so close the modal immediately for responsive UX. The library
+            // rescan is a non-blocking refresh that doesn't need the modal open
+            // and must not be able to hold it hostage if it hangs or throws.
             close();
+            scanTracks().catch(err =>
+                console.error(DEBUG_PREFIX, 'Post-register scanTracks failed:', err)
+            );
         } catch (e) {
             console.error(DEBUG_PREFIX, 'Folder registration failed:', e);
             darToast.error(`Failed to register folder: ${e.message}`);

@@ -562,43 +562,78 @@
 /* ---------- Playlist grid --------------------------------------------- */
 .dar-playlist-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-    gap: 6px;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 8px;
 }
 .dar-playlist-card {
     background: var(--dar-bg-elevated);
     border: 1px solid var(--dar-border-hairline);
     border-radius: var(--dar-radius-sm);
-    padding: 10px 12px;
+    padding: 0;
     cursor: pointer;
     transition: all var(--dar-t-fast);
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    justify-content: flex-end;
+    aspect-ratio: 1 / 1;
+    position: relative;
+    overflow: hidden;
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
 }
 .dar-playlist-card:hover {
-    background: var(--dar-bg-hover);
     border-color: var(--dar-border-soft);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
-.dar-playlist-card.new {
-    border-style: dashed;
-    align-items: center;
-    justify-content: center;
-    min-height: 56px;
-    color: var(--dar-text-muted);
+/* Text area at bottom of card — always visible */
+.dar-pl-info {
+    padding: 8px 10px;
+    position: relative;
+    z-index: 1;
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.7) 0%, rgba(0, 0, 0, 0.35) 70%, transparent 100%);
+    min-height: 42px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    gap: 1px;
+}
+/* No-cover card: center icon + info */
+.dar-playlist-card:not([style*="background-image"]) .dar-pl-info,
+.dar-playlist-card.dar-pl-no-cover .dar-pl-info {
     background: transparent;
+    flex: 1;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
 }
-
-.dar-playlist-card.new:hover {
-    color: var(--dar-text-primary);
-    border-color: var(--dar-border-soft);
+.dar-pl-cover-icon {
+    font-size: 18px;
+    color: var(--dar-text-muted);
+    margin-bottom: 6px;
+}
+.dar-playlist-card[style*="background-image"] .dar-pl-cover-icon,
+.dar-playlist-card:not(.dar-pl-no-cover)[style*="background-image"] .dar-pl-cover-icon {
+    display: none;
 }
 .dar-pl-name { font-size: 12px; font-weight: 500; }
 .dar-pl-count { font-size: 10px; color: var(--dar-text-muted); }
-.dar-pl-type { font-size: 10px; color: var(--dar-text-muted); }
+.dar-pl-type { font-size: 10px; color: var(--dar-text-secondary); }
 .dar-playlist-card.active {
     border-color: var(--dar-accent);
+    box-shadow: 0 0 0 1px var(--dar-accent), 0 4px 12px rgba(107, 155, 115, 0.15);
+}
+.dar-playlist-card.active .dar-pl-info {
+    background: linear-gradient(to top, rgba(107, 155, 115, 0.3) 0%, rgba(0, 0, 0, 0.3) 60%, transparent 100%);
+}
+.dar-playlist-card:not([style*="background-image"]).active,
+.dar-playlist-card.dar-pl-no-cover.active {
     background: color-mix(in srgb, var(--dar-accent) 8%, var(--dar-bg-elevated));
+}
+.dar-playlist-card:not([style*="background-image"]).active .dar-pl-info,
+.dar-playlist-card.dar-pl-no-cover.active .dar-pl-info {
+    background: transparent;
 }
 .dar-playlist-card .dar-pl-actions {
     position: absolute;
@@ -606,14 +641,15 @@
     right: 4px;
     display: none;
     gap: 2px;
+    z-index: 2;
 }
-.dar-playlist-card { position: relative; }
 .dar-playlist-card:hover .dar-pl-actions { display: flex; }
 .dar-pl-actions button {
-    background: var(--dar-bg-hover);
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px);
     border: 1px solid var(--dar-border-hairline);
     border-radius: var(--dar-radius-xs, 3px);
-    color: var(--dar-text-muted);
+    color: var(--dar-text-secondary);
     cursor: pointer;
     padding: 2px 5px;
     font-size: 10px;
@@ -1230,7 +1266,20 @@
 }
 
 .dar-sub-modal--md { width: min(600px, 90vw); }
-.dar-sub-modal--lg { width: min(700px, 90vw); }
+.dar-sub-modal--lg {
+    width: min(760px, 90vw);
+    max-height: 86vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* Inside --lg, the transfer list fills remaining space; everything else is fixed */
+.dar-sub-modal--lg > h3,
+.dar-sub-modal--lg > .dar-mpl-header,
+.dar-sub-modal--lg > .dar-sub-actions {
+    flex-shrink: 0;
+}
 
 /* Sub-modal typography */
 .dar-sub-modal h3 {
@@ -1318,7 +1367,8 @@
 .dar-transfer {
     display: flex;
     gap: 10px;
-    height: 340px;
+    flex: 1;
+    min-height: 280px;
     margin-bottom: 12px;
 }
 
@@ -1824,3 +1874,213 @@
 .dar-volume-slider-wrap:active .dar-volume-slider-thumb {
     background: #fff;
 }
+
+
+/* =========================================================================
+   Cover Image Picker — playlist create/edit modals
+   ========================================================================= */
+
+.dar-cover-picker {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    background: var(--dar-bg-elevated);
+    border: 1px solid var(--dar-border-hairline);
+    border-radius: var(--dar-radius-sm);
+}
+
+.dar-cover-preview {
+    width: 64px;
+    height: 64px;
+    border-radius: var(--dar-radius-sm);
+    overflow: hidden;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid var(--dar-border-hairline);
+}
+.dar-cover-preview img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+.dar-cover-preview.dar-cover-empty {
+    color: var(--dar-text-muted);
+    font-size: 20px;
+}
+
+.dar-cover-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 1;
+    min-width: 0;
+}
+
+.dar-cover-controls-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.dar-cover-upload-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    background: var(--dar-neutral-active-soft);
+    border: 1px solid var(--dar-neutral-active-dim);
+    border-radius: var(--dar-radius-xs);
+    color: var(--dar-text-primary);
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--dar-t-fast);
+    font-family: inherit;
+}
+.dar-cover-upload-btn:hover {
+    background: var(--dar-neutral-active-dim);
+}
+.dar-cover-upload-btn i { font-size: 10px; }
+
+.dar-cover-clear-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 5px 8px;
+    background: transparent;
+    border: 1px solid var(--dar-border-hairline);
+    border-radius: var(--dar-radius-xs);
+    color: var(--dar-text-muted);
+    font-size: 11px;
+    cursor: pointer;
+    transition: all var(--dar-t-fast);
+    font-family: inherit;
+}
+.dar-cover-clear-btn:hover {
+    color: var(--dar-text-secondary);
+    border-color: var(--dar-border-soft);
+}
+
+.dar-cover-status {
+    font-size: 10px;
+    color: var(--dar-text-muted);
+}
+.dar-cover-status.dar-cover-error {
+    color: #c97070;
+}
+
+/* ---------- Manual playlist editor — compact header ------------------- */
+/* Cover preview + name input + upload controls in one horizontal block. */
+
+.dar-mpl-header {
+    display: flex;
+    align-items: stretch;
+    gap: 12px;
+    margin-bottom: 12px;
+    padding: 10px 12px;
+    background: var(--dar-bg-elevated);
+    border: 1px solid var(--dar-border-hairline);
+    border-radius: var(--dar-radius-sm);
+}
+
+.dar-mpl-header-cover {
+    flex-shrink: 0;
+}
+
+.dar-mpl-header-cover .dar-cover-preview {
+    width: 72px;
+    height: 72px;
+}
+
+.dar-mpl-header-meta {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 8px;
+}
+
+.dar-mpl-header-meta .text_pole {
+    font-size: 14px;
+    font-weight: 500;
+    padding: 4px 8px;
+}
+
+
+/* ============================================================
+   Folder Upload modal (Nebula Loader companion feature)
+   Reuses .dar-sub-modal / .dar-folder-pick-row / .dar-sub-actions;
+   only the destination chooser below is new.
+   ============================================================ */
+
+.dar-upload-dest {
+    background: var(--dar-bg-elevated);
+    border: 1px solid var(--dar-border-hairline);
+    border-radius: var(--dar-radius-sm);
+    padding: 12px;
+    margin-bottom: 12px;
+}
+
+.dar-upload-dest-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--dar-text-primary);
+    margin-bottom: 8px;
+}
+
+.dar-upload-radio {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--dar-text-secondary);
+    cursor: pointer;
+    padding: 4px 0;
+}
+
+.dar-upload-radio input { cursor: pointer; }
+
+.dar-upload-radio--disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+.dar-upload-radio--disabled input { cursor: not-allowed; }
+
+.dar-upload-text,
+.dar-upload-select {
+    width: 100%;
+    box-sizing: border-box;
+    margin: 6px 0 10px 0;
+    padding: 7px 10px;
+    background: var(--dar-bg-modal);
+    border: 1px solid var(--dar-border-soft);
+    border-radius: var(--dar-radius-sm);
+    color: var(--dar-text-primary);
+    font-family: inherit;
+    font-size: 13px;
+}
+
+.dar-upload-text:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.dar-upload-text:focus,
+.dar-upload-select:focus {
+    outline: none;
+    border-color: rgba(88, 101, 242, 0.6);
+}
+
+.dar-upload-existing-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+/* Last input in the destination box shouldn't add trailing margin */
+.dar-upload-dest > .dar-upload-existing-row .dar-upload-text { margin-bottom: 0; }

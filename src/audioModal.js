@@ -69,6 +69,7 @@ import {
 import { darToast, darConfirm, showVolumePopup, hideVolumePopup } from './ui.js';
 import { openAutoTagModal, autoTagSingle } from './autoTag.js';
 import { openFolderImportModal } from './folderImport.js';
+import { openFolderUploadModal, openBgmUploadModal, isAudioUploadAvailable, isBgmUploadAvailable } from './folderUpload.js';
 import { openPlaylistFromChatModal } from './playlistFromChat.js';
 
 const MODAL_ID = 'dar-audio-modal-backdrop';
@@ -187,8 +188,10 @@ function buildModal() {
                                 <input type="text" data-dar="lib-search" placeholder="Search tracks by name or tag...">
                             </div>
                             <button class="dar-text-btn" data-dar="lib-scan" type="button"><i class="fa-solid fa-arrows-rotate"></i> Scan</button>
+                            <button class="dar-text-btn" data-dar="lib-bgm-upload" type="button" hidden><i class="fa-solid fa-upload"></i> Upload</button>
                             <button class="dar-text-btn" data-dar="lib-autotag" type="button"><i class="fa-solid fa-wand-magic-sparkles"></i> Auto-Tag</button>
                             <button class="dar-text-btn" data-dar="lib-add-folder" type="button"><i class="fa-solid fa-folder-plus"></i> Add Folder</button>
+                            <button class="dar-text-btn" data-dar="lib-upload" type="button" hidden><i class="fa-solid fa-upload"></i> Upload to Folder</button>
                         </div>
                         <div class="dar-filter-row" data-dar="lib-filters">
                             <button class="dar-filter active" data-source="all"     type="button">All</button>
@@ -217,6 +220,8 @@ function buildModal() {
                                 <i class="fa-solid fa-magnifying-glass"></i>
                                 <input type="text" data-dar="pl-search" placeholder="Search playlists...">
                             </div>
+                            <button class="dar-text-btn" data-dar="pl-new-smart" type="button"><i class="fa-solid fa-wand-magic-sparkles"></i> New Smart</button>
+                            <button class="dar-text-btn" data-dar="pl-new-manual" type="button"><i class="fa-solid fa-list"></i> New Manual</button>
                             <button class="dar-text-btn" data-dar="pl-from-chat" type="button"><i class="fa-solid fa-wand-magic-sparkles"></i> From Chat</button>
                         </div>
                         <div class="dar-playlist-grid" data-dar="pl-grid">
@@ -995,6 +1000,17 @@ function wireLibraryTab() {
         scanTracks();  // async, but we don't need to await
     });
 
+    // Upload (global) — opens the BGM upload modal. Hidden unless the Nebula
+    // Loader plugin advertises the bgmUpload feature. Writes into assets/bgm/,
+    // the same folder Scan reads, so uploads appear under the Global source.
+    const $libBgmUpload = q('lib-bgm-upload');
+    $libBgmUpload.addEventListener('click', () => {
+        openBgmUploadModal();
+    });
+    isBgmUploadAvailable().then(available => {
+        if (available) $libBgmUpload.hidden = false;
+    }).catch(() => { /* stay hidden on probe failure */ });
+
     // Auto-Tag — opens the AutoTag modal (direct import from autoTag.js)
     q('lib-autotag').addEventListener('click', () => {
         openAutoTagModal();
@@ -1004,6 +1020,17 @@ function wireLibraryTab() {
     q('lib-add-folder').addEventListener('click', () => {
         openFolderImportModal();
     });
+
+    // Upload — opens the upload modal. The button is hidden by default and only
+    // revealed if the Nebula Loader plugin is installed and advertises the
+    // audioUpload feature (probed once, asynchronously, below).
+    const $libUpload = q('lib-upload');
+    $libUpload.addEventListener('click', () => {
+        openFolderUploadModal();
+    });
+    isAudioUploadAvailable().then(available => {
+        if (available) $libUpload.hidden = false;
+    }).catch(() => { /* stay hidden on probe failure */ });
 
     // Filter buttons — delegation handles both groups
     $libFilters.addEventListener('click', (e) => {
@@ -1481,6 +1508,15 @@ function wirePlaylistsTab() {
         renderPlaylists();
     });
 
+    // "New Smart" + "New Manual" toolbar buttons
+    q('pl-new-smart')?.addEventListener('click', () => {
+        createSmartPlaylist();
+    });
+
+    q('pl-new-manual')?.addEventListener('click', () => {
+        createManualPlaylist();
+    });
+
     // "From Chat" → launch the AI playlist-from-chat modal (direct import)
     $plFromChat.addEventListener('click', () => {
         openPlaylistFromChatModal();
@@ -1490,17 +1526,6 @@ function wirePlaylistsTab() {
     $plGrid.addEventListener('click', (e) => {
         const card = e.target.closest('.dar-playlist-card');
         if (!card) return;
-
-        // "+ New" cards
-        const newType = card.dataset.newType;
-        if (newType === 'smart') {
-            createSmartPlaylist();
-            return;
-        }
-        if (newType === 'manual') {
-            createManualPlaylist();
-            return;
-        }
 
         const name = card.dataset.name;
         if (!name) return;
@@ -1562,10 +1587,9 @@ function wirePlaylistsTab() {
 
 /**
  * Render the playlist grid based on current playlists + search query.
- * Two "+ New" cards (smart / manual) are always appended at the end.
- *
  * Active playlist gets the `.active` class. Each existing playlist card
  * shows name + type/count line + edit/delete action buttons (visible on hover).
+ * Cards with a cover image use it as a CSS background.
  */
 function renderPlaylists() {
     if (!$plGrid) return;
@@ -1593,9 +1617,6 @@ function renderPlaylists() {
                 tags.push(pl.emotion_override);
             }
             const includeGlobal = pl.include_global !== false;
-            // Use null for character name → count across all characters (matches
-            // playlists.js updatePlaylistList behavior). Wrap in try/catch in case
-            // the library is empty and filterTracksByTags warns/throws.
             try {
                 count = filterTracksByTags(tags, null, includeGlobal).length;
             } catch (err) {
@@ -1609,32 +1630,39 @@ function renderPlaylists() {
         const typeLabel = isSmart ? 'Smart' : 'Manual';
         const activeClass = name === activeName ? ' active' : '';
 
+        // Cover image — prefer the 300×300 thumbnail for grid display
+        const coverUrl = pl.coverThumb || pl.coverImage || null;
+        const bgStyle = coverUrl ? ` style="background-image: url('${escapeHtml(coverUrl)}')"` : '';
+        const noCoverClass = coverUrl ? '' : ' dar-pl-no-cover';
+        const coverIcon = isSmart ? 'fa-wand-magic-sparkles' : 'fa-list';
+
         return `
-            <div class="dar-playlist-card${activeClass}" data-name="${escapeHtml(name)}">
+            <div class="dar-playlist-card${activeClass}${noCoverClass}" data-name="${escapeHtml(name)}"${bgStyle}>
                 <div class="dar-pl-actions">
                     <button data-action="edit"   title="Edit"   type="button"><i class="fa-solid fa-pen"></i></button>
                     <button data-action="delete" title="Delete" type="button"><i class="fa-solid fa-trash"></i></button>
                 </div>
-                <div class="dar-pl-name">${escapeHtml(name)}</div>
-                <div class="dar-pl-type"><i class="fa-solid ${typeIcon}"></i> ${typeLabel} · ${count} tracks</div>
+                <div class="dar-pl-info">
+                    <i class="fa-solid ${coverIcon} dar-pl-cover-icon"></i>
+                    <div class="dar-pl-name">${escapeHtml(name)}</div>
+                    <div class="dar-pl-type"><i class="fa-solid ${typeIcon}"></i> ${typeLabel} · ${count} tracks</div>
+                </div>
             </div>
         `;
     }).join('');
 
-    // "+ New" cards always shown at the end (not filtered out by search,
-    // since they're not playlists themselves).
-    const newCardsHtml = `
-        <div class="dar-playlist-card new" data-new-type="smart" title="Create a smart playlist (tag-based)">
-            <i class="fa-solid fa-wand-magic-sparkles" style="font-size: 14px; margin-bottom: 3px;"></i>
-            <div style="font-size: 11px;">New Smart</div>
-        </div>
-        <div class="dar-playlist-card new" data-new-type="manual" title="Create a manual playlist (hand-picked)">
-            <i class="fa-solid fa-list" style="font-size: 14px; margin-bottom: 3px;"></i>
-            <div style="font-size: 11px;">New Manual</div>
-        </div>
-    `;
+    $plGrid.innerHTML = cardsHtml;
 
-    $plGrid.innerHTML = cardsHtml + newCardsHtml;
+    // Empty state when no playlists exist (and not filtered)
+    if (filtered.length === 0 && names.length === 0) {
+        $plGrid.innerHTML = `<div class="dar-placeholder" style="grid-column: 1 / -1;">
+            No playlists yet — create one with the buttons above.
+        </div>`;
+    } else if (filtered.length === 0) {
+        $plGrid.innerHTML = `<div class="dar-placeholder" style="grid-column: 1 / -1;">
+            No playlists match your search.
+        </div>`;
+    }
 }
 
 // ----------------------------------------------------------------------

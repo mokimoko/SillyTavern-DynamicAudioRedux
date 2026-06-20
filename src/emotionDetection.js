@@ -82,6 +82,10 @@ export async function moduleWorker() {
         playbackState.currentEmotion = newEmotion;
         debugLog(`Emotion changed to: ${playbackState.currentEmotion}`);
 
+        // When emotion_detection is off, still track the emotion internally
+        // (for UI display / tagging) but don't auto-switch the playing track.
+        if (!extension_settings.audio.emotion_detection) return;
+
         // Don't auto-switch tracks while the user's queue is playing
         if (isQueueActive()) return;
 

@@ -4,6 +4,7 @@
 
 import { saveSettingsDebounced } from '../../../../../script.js';
 import { getContext, extension_settings } from '../../../../extensions.js';
+import { getRequestHeaders } from '../../../../../script.js';
 
 import {
     DEBUG_PREFIX,
@@ -16,7 +17,243 @@ import {
 import { filterTracksByTags } from './player.js';
 import { darToast, darConfirm } from './ui.js';
 
+// ============================================================================
+// Cover image upload — 300×300 JPEG thumbnail for playlist cards
+// ============================================================================
+
+const COVER_UPLOAD_FOLDER = 'dynamic_audio';
+const COVER_THUMB_SIZE = 300;        // px — square thumbnail
+const COVER_THUMB_QUALITY = 0.88;    // JPEG quality
+
+function blobToBase64(blob) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result).split(',')[1]);
+        reader.onerror = () => reject(new Error('Failed to read file'));
+        reader.readAsDataURL(blob);
+    });
+}
+
+async function postImage(base64, format, filename) {
+    const response = await fetch('/api/images/upload', {
+        method: 'POST',
+        headers: getRequestHeaders(),
+        body: JSON.stringify({ image: base64, format, filename, ch_name: COVER_UPLOAD_FOLDER }),
+    });
+    if (!response.ok) throw new Error(`Upload failed: ${await response.text()}`);
+    return (await response.json()).path;
+}
+
+function safeBaseName(file) {
+    const raw = (file.name || 'cover').replace(/\.[^.]+$/, '');
+    return (raw.trim().replace(/[^\w.-]+/g, '_').replace(/_+/g, '_').replace(/^[._-]+|[._-]+$/g, '') || 'cover').slice(0, 50);
+}
+
+/**
+ * Downscale an image to a 300×300 square JPEG thumbnail (center-cropped).
+ * Uses stepped halving for quality (same approach as Story Manager).
+ */
+function makeCoverThumbBlob(file) {
+    return new Promise((resolve) => {
+        const objUrl = URL.createObjectURL(file);
+        const img = new Image();
+        img.onload = () => {
+            try {
+                const size = COVER_THUMB_SIZE;
+                // Determine crop region (center-crop to square)
+                const srcSize = Math.min(img.width, img.height);
+                const sx = (img.width - srcSize) / 2;
+                const sy = (img.height - srcSize) / 2;
+
+                // Draw the cropped region, stepping down for quality
+                let src = document.createElement('canvas');
+                src.width = srcSize;
+                src.height = srcSize;
+                const sctx = src.getContext('2d');
+                sctx.drawImage(img, sx, sy, srcSize, srcSize, 0, 0, srcSize, srcSize);
+
+                // Step down by halves until near target
+                let curSize = srcSize;
+                while (curSize > size * 2) {
+                    const stepSize = Math.max(size, Math.floor(curSize / 2));
+                    const step = document.createElement('canvas');
+                    step.width = stepSize;
+                    step.height = stepSize;
+                    const ctx = step.getContext('2d');
+                    ctx.imageSmoothingEnabled = true;
+                    ctx.imageSmoothingQuality = 'high';
+                    ctx.drawImage(src, 0, 0, stepSize, stepSize);
+                    src = step;
+                    curSize = stepSize;
+                }
+
+                // Final draw
+                const out = document.createElement('canvas');
+                out.width = size;
+                out.height = size;
+                const cx = out.getContext('2d');
+                cx.fillStyle = '#000000';
+                cx.fillRect(0, 0, size, size);
+                cx.imageSmoothingEnabled = true;
+                cx.imageSmoothingQuality = 'high';
+                cx.drawImage(src, 0, 0, size, size);
+
+                URL.revokeObjectURL(objUrl);
+                out.toBlob((blob) => resolve(blob), 'image/jpeg', COVER_THUMB_QUALITY);
+            } catch (e) {
+                URL.revokeObjectURL(objUrl);
+                resolve(null);
+            }
+        };
+        img.onerror = () => { URL.revokeObjectURL(objUrl); resolve(null); };
+        img.src = objUrl;
+    });
+}
+
+/**
+ * Upload a cover image: creates a 300×300 thumbnail and also uploads the
+ * full image as a fallback. Returns { coverImage, coverThumb }.
+ */
+async function uploadCoverImage(file) {
+    const format = (file.type.split('/')[1] || 'png').toLowerCase();
+    const base = `${safeBaseName(file)}_${Date.now().toString(36)}`;
+
+    // Upload full image
+    const coverImage = await postImage(await blobToBase64(file), format, base);
+
+    // Generate and upload 300×300 thumbnail
+    let coverThumb = null;
+    try {
+        const blob = await makeCoverThumbBlob(file);
+        if (blob) coverThumb = await postImage(await blobToBase64(blob), 'jpeg', `${base}_300`);
+    } catch (e) {
+        console.warn('[DynamicAudioRedux] cover thumbnail generation failed:', e);
+    }
+
+    return { coverImage, coverThumb: coverThumb || coverImage };
+}
+
+/**
+ * Render a cover image picker inside a container element.
+ * @param {Element} container - DOM element to render into
+ * @param {{ coverImage: string|null, coverThumb: string|null }} current
+ * @param {(v: { coverImage: string|null, coverThumb: string|null }) => void} onChange
+ */
+function renderCoverPicker(container, current, onChange) {
+    const url = current.coverThumb || current.coverImage;
+
+    container.innerHTML = `
+        <div class="dar-cover-picker">
+            <div class="dar-cover-preview ${url ? '' : 'dar-cover-empty'}">
+                ${url
+                    ? `<img src="${_plEsc(url)}" alt="cover">`
+                    : `<i class="fa-solid fa-image"></i>`}
+            </div>
+            <div class="dar-cover-controls">
+                <div class="dar-cover-controls-row">
+                    <label class="dar-cover-upload-btn">
+                        <i class="fa-solid fa-upload"></i> Upload
+                        <input type="file" accept="image/*" hidden>
+                    </label>
+                    ${url ? `<button class="dar-cover-clear-btn" type="button">
+                        <i class="fa-solid fa-xmark"></i> Remove
+                    </button>` : ''}
+                </div>
+                <div class="dar-cover-status"></div>
+            </div>
+        </div>
+    `;
+
+    const status = container.querySelector('.dar-cover-status');
+    const fileInput = container.querySelector('input[type="file"]');
+    const clearBtn = container.querySelector('.dar-cover-clear-btn');
+
+    const setStatus = (msg, isError = false) => {
+        if (!status) return;
+        status.textContent = msg || '';
+        status.classList.toggle('dar-cover-error', isError);
+    };
+
+    fileInput?.addEventListener('change', async () => {
+        const file = fileInput.files?.[0];
+        if (!file) return;
+        setStatus('Uploading…');
+        try {
+            const result = await uploadCoverImage(file);
+            onChange(result);
+            renderCoverPicker(container, result, onChange);
+        } catch (e) {
+            console.error('[DynamicAudioRedux] cover upload failed:', e);
+            setStatus(e.message || 'Upload failed', true);
+        }
+    });
+
+    clearBtn?.addEventListener('click', () => {
+        onChange({ coverImage: null, coverThumb: null });
+        renderCoverPicker(container, { coverImage: null, coverThumb: null }, onChange);
+    });
+}
+
+/**
+ * Split cover picker — preview element and controls element are separate.
+ * Used by the manual playlist editor for a more compact header layout.
+ */
+function renderCoverPickerSplit(previewContainer, controlsContainer, current, onChange) {
+    const url = current.coverThumb || current.coverImage;
+
+    previewContainer.innerHTML = `
+        <div class="dar-cover-preview ${url ? '' : 'dar-cover-empty'}">
+            ${url
+                ? `<img src="${_plEsc(url)}" alt="cover">`
+                : `<i class="fa-solid fa-image"></i>`}
+        </div>
+    `;
+
+    controlsContainer.innerHTML = `
+        <div class="dar-cover-controls-row">
+            <label class="dar-cover-upload-btn">
+                <i class="fa-solid fa-upload"></i> Upload
+                <input type="file" accept="image/*" hidden>
+            </label>
+            ${url ? `<button class="dar-cover-clear-btn" type="button">
+                <i class="fa-solid fa-xmark"></i> Remove
+            </button>` : ''}
+        </div>
+        <div class="dar-cover-status"></div>
+    `;
+
+    const status = controlsContainer.querySelector('.dar-cover-status');
+    const fileInput = controlsContainer.querySelector('input[type="file"]');
+    const clearBtn = controlsContainer.querySelector('.dar-cover-clear-btn');
+
+    const setStatus = (msg, isError = false) => {
+        if (!status) return;
+        status.textContent = msg || '';
+        status.classList.toggle('dar-cover-error', isError);
+    };
+
+    fileInput?.addEventListener('change', async () => {
+        const file = fileInput.files?.[0];
+        if (!file) return;
+        setStatus('Uploading…');
+        try {
+            const result = await uploadCoverImage(file);
+            onChange(result);
+            renderCoverPickerSplit(previewContainer, controlsContainer, result, onChange);
+        } catch (e) {
+            console.error('[DynamicAudioRedux] cover upload failed:', e);
+            setStatus(e.message || 'Upload failed', true);
+        }
+    });
+
+    clearBtn?.addEventListener('click', () => {
+        onChange({ coverImage: null, coverThumb: null });
+        renderCoverPickerSplit(previewContainer, controlsContainer, { coverImage: null, coverThumb: null }, onChange);
+    });
+}
+
 export function createSmartPlaylist() {
+    let coverState = { coverImage: null, coverThumb: null };
     const backdrop = $('<div class="dar-sub-backdrop"></div>');
 
     const editor = $(`
@@ -61,6 +298,11 @@ export function createSmartPlaylist() {
                 </div>
             </div>
 
+            <div style="margin-bottom: 12px;">
+                <label style="display: block; margin-bottom: 4px;">Cover Image</label>
+                <div id="smart_cover_picker"></div>
+            </div>
+
             <div id="smart_preview" class="dar-sub-item" style="margin-bottom: 12px; font-size: 12px;">
                 <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
                     <strong>Preview:</strong>
@@ -87,6 +329,14 @@ export function createSmartPlaylist() {
     $('body').append(backdrop);
 
     setTimeout(() => $('#smart_playlist_name').focus(), 100);
+
+    // Mount cover image picker
+    const coverHost = document.getElementById('smart_cover_picker');
+    if (coverHost) {
+        renderCoverPicker(coverHost, coverState, (v) => {
+            coverState = v;
+        });
+    }
 
     function updateSmartPreview() {
         const tagsInput = $('#smart_playlist_tags').val().trim();
@@ -177,7 +427,9 @@ export function createSmartPlaylist() {
             tags: tags,
             emotion_mode: emotionMode,
             emotion_override: emotionMode === 'manual' ? emotionOverride : null,
-            include_global: $('#smart_include_global').is(':checked')
+            include_global: $('#smart_include_global').is(':checked'),
+            coverImage: coverState.coverImage,
+            coverThumb: coverState.coverThumb,
         };
 
         if (extension_settings.audio.debug_mode) {
@@ -210,10 +462,13 @@ export function createManualPlaylist() {
 // SHARED MANUAL PLAYLIST EDITOR — Transfer-list (two-column) layout
 // ============================================================================
 
-function openManualPlaylistEditor({ isEdit = false, name = '', existingTracks = [] }) {
+function openManualPlaylistEditor({ isEdit = false, name = '', existingTracks = [], existingCover = null }) {
     // Mutable ordered list of selected track paths
     const selected = [...existingTracks];
     let availSearch = '';
+    let coverState = existingCover
+        ? { coverImage: existingCover.coverImage || null, coverThumb: existingCover.coverThumb || null }
+        : { coverImage: null, coverThumb: null };
 
     const backdrop = $('<div class="dar-sub-backdrop"></div>');
 
@@ -221,10 +476,13 @@ function openManualPlaylistEditor({ isEdit = false, name = '', existingTracks = 
         <div class="dar-sub-modal dar-sub-modal--lg">
             <h3>${isEdit ? 'Edit' : 'Create'} Manual Playlist</h3>
 
-            <div style="margin-bottom: 12px;">
-                <label for="dar_mpl_name" style="display: block; margin-bottom: 4px;">Playlist Name</label>
-                <input type="text" class="text_pole" id="dar_mpl_name"
-                    value="${_plEsc(name)}" placeholder="e.g. My Favorites">
+            <div class="dar-mpl-header">
+                <div class="dar-mpl-header-cover" id="dar_mpl_cover"></div>
+                <div class="dar-mpl-header-meta">
+                    <input type="text" class="text_pole" id="dar_mpl_name"
+                        value="${_plEsc(name)}" placeholder="Playlist name…">
+                    <div id="dar_mpl_cover_controls"></div>
+                </div>
             </div>
 
             <div class="dar-transfer">
@@ -261,6 +519,15 @@ function openManualPlaylistEditor({ isEdit = false, name = '', existingTracks = 
     backdrop.append(modal);
     $('body').append(backdrop);
     setTimeout(() => $('#dar_mpl_name').focus(), 100);
+
+    // Mount cover image picker (split mode: preview in one el, controls in another)
+    const coverHost = document.getElementById('dar_mpl_cover');
+    const controlsHost = document.getElementById('dar_mpl_cover_controls');
+    if (coverHost && controlsHost) {
+        renderCoverPickerSplit(coverHost, controlsHost, coverState, (v) => {
+            coverState = v;
+        });
+    }
 
     // --- helpers ---
 
@@ -441,6 +708,8 @@ function openManualPlaylistEditor({ isEdit = false, name = '', existingTracks = 
         extension_settings.audio.playlists[newName] = {
             type: 'manual',
             tracks: [...selected],
+            coverImage: coverState.coverImage,
+            coverThumb: coverState.coverThumb,
         };
 
         debugLog(`${isEdit ? 'Updated' : 'Created'} manual playlist: ${newName}`);
@@ -480,6 +749,10 @@ export function editPlaylist(name) {
 }
 
 function editSmartPlaylist(name, playlist) {
+    let coverState = {
+        coverImage: playlist.coverImage || null,
+        coverThumb: playlist.coverThumb || null,
+    };
     const backdrop = $('<div class="dar-sub-backdrop"></div>');
 
     const editor = $(`
@@ -524,6 +797,11 @@ function editSmartPlaylist(name, playlist) {
                 </div>
             </div>
 
+            <div style="margin-bottom: 12px;">
+                <label style="display: block; margin-bottom: 4px;">Cover Image</label>
+                <div id="edit_smart_cover_picker"></div>
+            </div>
+
             <div id="edit_smart_preview" class="dar-sub-item" style="margin-bottom: 12px; font-size: 12px;">
                 <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
                     <strong>Preview:</strong>
@@ -550,6 +828,14 @@ function editSmartPlaylist(name, playlist) {
     $('body').append(backdrop);
 
     setTimeout(() => $('#edit_smart_playlist_name').focus(), 100);
+
+    // Mount cover image picker
+    const editCoverHost = document.getElementById('edit_smart_cover_picker');
+    if (editCoverHost) {
+        renderCoverPicker(editCoverHost, coverState, (v) => {
+            coverState = v;
+        });
+    }
 
     function updateEditPreview() {
         const tagsInput = $('#edit_smart_playlist_tags').val().trim();
@@ -644,7 +930,9 @@ function editSmartPlaylist(name, playlist) {
             tags: tags,
             emotion_mode: emotionMode,
             emotion_override: emotionMode === 'manual' ? emotionOverride : null,
-            include_global: $('#edit_smart_include_global').is(':checked')
+            include_global: $('#edit_smart_include_global').is(':checked'),
+            coverImage: coverState.coverImage,
+            coverThumb: coverState.coverThumb,
         };
 
         if (newName !== name) {
@@ -681,6 +969,10 @@ function editManualPlaylist(name, playlist) {
         isEdit: true,
         name,
         existingTracks: [...(playlist.tracks || [])],
+        existingCover: {
+            coverImage: playlist.coverImage || null,
+            coverThumb: playlist.coverThumb || null,
+        },
     });
 }
 
