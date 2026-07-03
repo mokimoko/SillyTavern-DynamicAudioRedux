@@ -11,6 +11,12 @@ import { darToast } from './ui.js';
 
 const DEBUG_PREFIX = '<Audio-AutoTag>';
 
+// Debug-gated error logging. The user already sees these failures via a toast,
+// so keep them out of the console unless debug_mode is on.
+const debugError = (...args) => {
+    if (extension_settings?.audio?.debug_mode) console.error(DEBUG_PREFIX, ...args);
+};
+
 export class AutoTag {
     constructor(trackLibrary, extension_settings, saveMetadata, EMOTION_TAGS, generateRaw) {
         this.trackLibrary = trackLibrary;
@@ -197,7 +203,7 @@ export class AutoTag {
             return taggedTracks;
             
         } catch (error) {
-            console.error(DEBUG_PREFIX, 'AI tagging failed:', error);
+            debugError('AI tagging failed:', error);
             throw error;
         }
     }
@@ -390,7 +396,7 @@ export class AutoTag {
                 });
                 
             } catch (error) {
-                console.error(DEBUG_PREFIX, 'Error during auto-tagging:', error);
+                debugError('Error during auto-tagging:', error);
                 darToast.error(`Failed to get AI tags: ${error.message}`);
                 backdrop.remove();
             }
@@ -466,7 +472,7 @@ export async function autoTagSingle(trackPath) {
         showSingleTagConfirm(trackPath, displayName, taggedTracks[0].tags);
 
     } catch (error) {
-        console.error('<Audio-AutoTag>', 'Single-track tagging failed:', error);
+        debugError('Single-track tagging failed:', error);
         darToast.error(`Failed to tag: ${error.message}`);
     }
 }

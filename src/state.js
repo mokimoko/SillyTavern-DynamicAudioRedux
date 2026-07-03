@@ -121,3 +121,12 @@ export function debugLog(msg) {
         console.log(DEBUG_PREFIX, msg);
     }
 }
+
+// Debug-gated error logging. Use for failures the user already sees via a
+// toast/status message, so the console stays clean unless debug_mode is on.
+// Genuine, user-invisible failures should still call console.error directly.
+export function debugError(...args) {
+    if (extension_settings.audio && extension_settings.audio.debug_mode) {
+        console.error(DEBUG_PREFIX, ...args);
+    }
+}

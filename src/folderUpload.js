@@ -27,7 +27,7 @@ import {
 import { buildImportedTrackUrl } from './folderImport.js';
 import { scanTracks } from './scanner.js';
 import { darToast } from './ui.js';
-import { DEBUG_PREFIX, debugLog } from './state.js';
+import { DEBUG_PREFIX, debugLog, debugError } from './state.js';
 
 const AUDIO_EXTENSIONS = ['mp3', 'wav', 'ogg', 'flac', 'm4a', 'aac', 'opus'];
 const AUDIO_RE = new RegExp(`\\.(${AUDIO_EXTENSIONS.join('|')})$`, 'i');
@@ -388,7 +388,7 @@ export function openFolderUploadModal() {
         try {
             result = await postAudioBatch(batch);
         } catch (e) {
-            console.error(DEBUG_PREFIX, 'Audio upload failed:', e);
+            debugError('Audio upload failed:', e);
             darToast.error(e.message || 'Upload failed.');
             $confirm.disabled = false;
             $browse.disabled = false;
@@ -601,7 +601,7 @@ export function openBgmUploadModal() {
         try {
             result = await postBgmBatch(batch);
         } catch (e) {
-            console.error(DEBUG_PREFIX, 'BGM upload failed:', e);
+            debugError('BGM upload failed:', e);
             darToast.error(e.message || 'Upload failed.');
             $confirm.disabled = false;
             $browse.disabled = false;

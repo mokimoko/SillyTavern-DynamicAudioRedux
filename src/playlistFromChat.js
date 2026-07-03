@@ -13,6 +13,12 @@ import { darToast } from './ui.js';
 
 const DEBUG_PREFIX = '<Audio-PlaylistFromChat>';
 
+// Debug-gated error logging. These failures already surface to the user via a
+// toast, so keep them out of the console unless debug_mode is on.
+const debugError = (...args) => {
+    if (extension_settings?.audio?.debug_mode) console.error(DEBUG_PREFIX, ...args);
+};
+
 export class PlaylistFromChat {
     constructor(trackLibrary, extension_settings, saveSettingsDebounced, generateRaw) {
         this.trackLibrary = trackLibrary;
@@ -445,7 +451,7 @@ Use exact track names from the provided list.`
             };
             
         } catch (error) {
-            console.error(DEBUG_PREFIX, 'AI suggestion failed:', error);
+            debugError('AI suggestion failed:', error);
             throw error;
         }
     }
@@ -636,7 +642,7 @@ Rules:
                 $('#playlist_name_input').val(name);
                 darToast.success(`Generated name: ${name}`);
             } catch (error) {
-                console.error(DEBUG_PREFIX, 'Name generation failed:', error);
+                debugError('Name generation failed:', error);
                 darToast.error(`Failed to generate name: ${error.message}`);
             } finally {
                 $btn.prop('disabled', false).html(originalHtml);
@@ -822,7 +828,7 @@ Rules:
                 });
                 
             } catch (error) {
-                console.error(DEBUG_PREFIX, 'Error getting AI suggestions:', error);
+                debugError('Error getting AI suggestions:', error);
                 darToast.error(`Failed to get AI suggestions: ${error.message}`);
                 $btn.prop('disabled', false).html(originalHtml);
             }

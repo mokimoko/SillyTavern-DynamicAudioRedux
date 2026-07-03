@@ -12,6 +12,7 @@ import {
     trackLibrary,
     playbackState,
     debugLog,
+    debugError,
     audioEvents,
 } from './state.js';
 import { filterTracksByTags } from './player.js';
@@ -127,7 +128,7 @@ async function uploadCoverImage(file) {
         const blob = await makeCoverThumbBlob(file);
         if (blob) coverThumb = await postImage(await blobToBase64(blob), 'jpeg', `${base}_300`);
     } catch (e) {
-        console.warn('[DynamicAudioRedux] cover thumbnail generation failed:', e);
+        debugError('cover thumbnail generation failed:', e);
     }
 
     return { coverImage, coverThumb: coverThumb || coverImage };
@@ -183,7 +184,7 @@ function renderCoverPicker(container, current, onChange) {
             onChange(result);
             renderCoverPicker(container, result, onChange);
         } catch (e) {
-            console.error('[DynamicAudioRedux] cover upload failed:', e);
+            debugError('cover upload failed:', e);
             setStatus(e.message || 'Upload failed', true);
         }
     });
@@ -241,7 +242,7 @@ function renderCoverPickerSplit(previewContainer, controlsContainer, current, on
             onChange(result);
             renderCoverPickerSplit(previewContainer, controlsContainer, result, onChange);
         } catch (e) {
-            console.error('[DynamicAudioRedux] cover upload failed:', e);
+            debugError('cover upload failed:', e);
             setStatus(e.message || 'Upload failed', true);
         }
     });
@@ -991,7 +992,7 @@ export function updatePlaylistDropdown() {
 
 export function createSmartPlaylistFromTags(name, tags, characterName = null) {
     if (!name || tags.length === 0) {
-        console.error(DEBUG_PREFIX, 'Invalid playlist parameters');
+        debugError('Invalid playlist parameters');
         return false;
     }
 
@@ -1012,7 +1013,7 @@ export function createSmartPlaylistFromTags(name, tags, characterName = null) {
 
 export function createManualPlaylistFromTracks(name, tracks) {
     if (!name || !tracks || tracks.length === 0) {
-        console.error(DEBUG_PREFIX, 'Invalid playlist parameters');
+        debugError('Invalid playlist parameters');
         return false;
     }
 

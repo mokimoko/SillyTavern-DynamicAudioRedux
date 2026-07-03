@@ -29,7 +29,7 @@ import {
 } from './dataStore.js';
 import { scanTracks } from './scanner.js';
 import { darToast } from './ui.js';
-import { DEBUG_PREFIX, debugLog } from './state.js';
+import { DEBUG_PREFIX, debugLog, debugError } from './state.js';
 
 const AUDIO_EXTENSIONS = ['mp3', 'wav', 'ogg', 'flac', 'm4a', 'aac', 'opus'];
 const AUDIO_RE = new RegExp(`\\.(${AUDIO_EXTENSIONS.join('|')})$`, 'i');
@@ -278,7 +278,7 @@ export function openFolderImportModal() {
                 console.error(DEBUG_PREFIX, 'Post-register scanTracks failed:', err)
             );
         } catch (e) {
-            console.error(DEBUG_PREFIX, 'Folder registration failed:', e);
+            debugError('Folder registration failed:', e);
             darToast.error(`Failed to register folder: ${e.message}`);
             $confirm.disabled = false;
             $confirm.innerHTML = `<i class="fa-solid fa-check"></i> Register`;

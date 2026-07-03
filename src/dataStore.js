@@ -225,7 +225,7 @@ function migrateFromSettings() {
     }
 
     if (migrated) {
-        console.log(DEBUG_PREFIX, 'Migrated track_metadata / playlists / character_defaults from extension_settings → user/files/dar_library.json. Settings copies retained as redundancy until next ST update.');
+        debugLog('Migrated track_metadata / playlists / character_defaults from extension_settings → user/files/dar_library.json. Settings copies retained as redundancy until next ST update.');
     }
     return seed;
 }
