@@ -9,40 +9,81 @@
 
 /* ---------- Design tokens --------------------------------------------- */
 :root {
-    /* Backgrounds (dark neutrals) */
-    --dar-bg-page: #09090a;
-    --dar-bg-modal: rgba(17, 17, 19, 0.96);
-    --dar-bg-elevated: rgba(255, 255, 255, 0.02);
-    --dar-bg-hover: rgba(255, 255, 255, 0.04);
-    --dar-bg-input: rgba(0, 0, 0, 0.3);
-    --dar-bg-current: rgba(107, 155, 115, 0.05);
+    /* =====================================================================
+       THEME-ADAPTIVE TOKEN LAYER (2026-07)
+       ---------------------------------------------------------------------
+       DynamicAudioRedux now adapts to BOTH light and dark SillyTavern themes.
+       Surfaces keep a frosted dark/tint feel; text, borders, fills and accent
+       follow the active theme via --SmartTheme* tokens (color-mix on
+       --SmartThemeBodyColor). Each token keeps a literal fallback matching the
+       original "dark neutral" palette so the extension still renders if a
+       SmartTheme token is entirely absent.
 
-    /* Borders */
-    --dar-border-hairline: rgba(255, 255, 255, 0.05);
-    --dar-border-soft: rgba(255, 255, 255, 0.08);
+       Accent origin: the suite had TWO parallel accents before conversion —
+       a sage green (#6b9b73) for the now-playing indicator and a blurple
+       (#7aa2f7) bolted on later for bulk-selection. Neither meant "success";
+       both meant "active/accent". They're now unified into ONE theme-adaptive
+       accent driven by --SmartThemeQuoteColor, so the accent follows the user's
+       theme instead of clashing as a fixed hue on light themes.
+       ===================================================================== */
 
-    /* Text */
-    --dar-text-primary: #d4d4d6;
-    --dar-text-secondary: rgba(212, 212, 214, 0.55);
-    --dar-text-muted: rgba(212, 212, 214, 0.32);
+    /* ── Surfaces (frosted theme tint over dark base) ─────────── */
+    --dar-bg-page:     var(--SmartThemeBlurTintColor, #09090a);
+    --dar-bg-modal:    var(--SmartThemeBlurTintColor, rgba(17, 17, 19, 0.96));
+    /* Elevated/hover/current: body-color tints, NOT white/black scrims, so
+       they read as subtle depth on both themes. */
+    --dar-bg-elevated: color-mix(in srgb, var(--SmartThemeBodyColor) 4%, transparent);
+    --dar-bg-hover:    color-mix(in srgb, var(--SmartThemeBodyColor) 6%, transparent);
+    --dar-bg-input:    color-mix(in srgb, var(--SmartThemeBodyColor) 6%, transparent);
+    --dar-bg-current:  var(--dar-accent-soft);
 
-    /* Accent green — currently-playing track ONLY */
-    --dar-accent: #6b9b73;
-    --dar-accent-soft: rgba(107, 155, 115, 0.08);
-    --dar-accent-dim: rgba(107, 155, 115, 0.4);
+    /* ── Borders (body-color mixes, were rgba(255,255,255, low)) ─ */
+    --dar-border-hairline: color-mix(in srgb, var(--SmartThemeBodyColor) 5%, transparent);
+    --dar-border-soft:     color-mix(in srgb, var(--SmartThemeBodyColor) 8%, transparent);
 
-    /* Neutral active — tabs, toggles, filters, focus */
-    --dar-neutral-active: rgba(255, 255, 255, 0.55);
-    --dar-neutral-active-strong: rgba(255, 255, 255, 0.85);
-    --dar-neutral-active-soft: rgba(255, 255, 255, 0.12);
-    --dar-neutral-active-dim: rgba(255, 255, 255, 0.25);
+    /* ── Text tiers (color-mix on body color) ─────────────────── */
+    --dar-text-primary:   color-mix(in srgb, var(--SmartThemeBodyColor) 88%, transparent);
+    --dar-text-secondary: color-mix(in srgb, var(--SmartThemeBodyColor) 55%, transparent);
+    --dar-text-muted:     color-mix(in srgb, var(--SmartThemeBodyColor) 34%, transparent);
+
+    /* ── Accent — unified, theme-adaptive (was green + blue) ──── */
+    --dar-accent-base:   var(--SmartThemeQuoteColor, #6b9b73);
+    --dar-accent:        var(--dar-accent-base);
+    --dar-accent-soft:   color-mix(in srgb, var(--dar-accent-base) 10%, transparent);
+    --dar-accent-dim:    color-mix(in srgb, var(--dar-accent-base) 45%, transparent);
+    --dar-accent-wash:   color-mix(in srgb, var(--dar-accent-base) 6%, transparent);
+    --dar-accent-bg:     color-mix(in srgb, var(--dar-accent-base) 12%, transparent);
+    --dar-accent-border: color-mix(in srgb, var(--dar-accent-base) 25%, transparent);
+    --dar-accent-line:   color-mix(in srgb, var(--dar-accent-base) 50%, transparent);
+
+    /* ── Neutral active (tabs, toggles, filters, focus) ───────── */
+    --dar-neutral-active:        color-mix(in srgb, var(--SmartThemeBodyColor) 55%, transparent);
+    --dar-neutral-active-strong: color-mix(in srgb, var(--SmartThemeBodyColor) 85%, transparent);
+    --dar-neutral-active-soft:   color-mix(in srgb, var(--SmartThemeBodyColor) 12%, transparent);
+    --dar-neutral-active-dim:    color-mix(in srgb, var(--SmartThemeBodyColor) 25%, transparent);
+    --dar-neutral-inactive:      color-mix(in srgb, var(--SmartThemeBodyColor) 35%, transparent);
+
+    /* ── Semantic status — hue identity kept, tone-adaptive ───── */
+    --dar-err:       color-mix(in srgb, rgb(201, 112, 112) 78%, var(--SmartThemeBodyColor) 22%);
+    --dar-err-bright:color-mix(in srgb, rgb(224, 154, 154) 82%, var(--SmartThemeBodyColor) 18%);
+    --dar-warn:      color-mix(in srgb, rgb(212, 160, 90) 80%, var(--SmartThemeBodyColor) 20%);
+    --dar-info:      color-mix(in srgb, rgb(88, 101, 242) 72%, var(--SmartThemeBodyColor) 28%);
+    /* Missing/absent folder marker (was rgb(220,130,110) orange) */
+    --dar-danger:    color-mix(in srgb, rgb(220, 130, 110) 78%, var(--SmartThemeBodyColor) 22%);
+
+    /* ── Dark scrims / overlays — intentionally dark on BOTH ──── */
+    --dar-scrim:        rgba(0, 0, 0, 0.55);
+    --dar-scrim-strong: rgba(0, 0, 0, 0.7);
+    --dar-scrim-popup:  rgba(0, 0, 0, 0.88);
+    --dar-scrim-mini:   rgba(0, 0, 0, 0.65);
+    --dar-scrim-label:  rgba(0, 0, 0, 0.85);
 
     /* Radii */
     --dar-radius-xs: 3px;
     --dar-radius-sm: 4px;
     --dar-radius-md: 6px;
 
-    /* Shadows */
+    /* Shadows — stay dark on both themes */
     --dar-shadow-modal: 0 16px 48px rgba(0, 0, 0, 0.55);
     --dar-shadow-mini: 0 4px 16px rgba(0, 0, 0, 0.4);
 
@@ -80,7 +121,7 @@
     position: fixed;
     inset: 0;
     z-index: 100;
-    background: rgba(0, 0, 0, 0.55);
+    background: var(--dar-scrim);
     backdrop-filter: blur(6px);
     -webkit-backdrop-filter: blur(6px);
     display: flex;
@@ -136,7 +177,7 @@
 .dar-np-progress {
     flex: 1;
     height: 2px;
-    background: rgba(255, 255, 255, 0.06);
+    background: color-mix(in srgb, var(--SmartThemeBodyColor) 6%, transparent);
     border-radius: 1px;
     cursor: pointer;
     position: relative;
@@ -535,7 +576,7 @@
     position: relative;
     width: 28px;
     height: 16px;
-    background: rgba(255, 255, 255, 0.08);
+    background: color-mix(in srgb, var(--SmartThemeBodyColor) 8%, transparent);
     border-radius: 2px;
     cursor: pointer;
     transition: background var(--dar-t-base);
@@ -622,10 +663,10 @@
 .dar-pl-type { font-size: 10px; color: var(--dar-text-secondary); }
 .dar-playlist-card.active {
     border-color: var(--dar-accent);
-    box-shadow: 0 0 0 1px var(--dar-accent), 0 4px 12px rgba(107, 155, 115, 0.15);
+    box-shadow: 0 0 0 1px var(--dar-accent), 0 4px 12px var(--dar-accent-bg);
 }
 .dar-playlist-card.active .dar-pl-info {
-    background: linear-gradient(to top, rgba(107, 155, 115, 0.3) 0%, rgba(0, 0, 0, 0.3) 60%, transparent 100%);
+    background: linear-gradient(to top, var(--dar-accent-bg) 0%, rgba(0, 0, 0, 0.3) 60%, transparent 100%);
 }
 .dar-playlist-card:not([style*="background-image"]).active,
 .dar-playlist-card.dar-pl-no-cover.active {
@@ -645,7 +686,7 @@
 }
 .dar-playlist-card:hover .dar-pl-actions { display: flex; }
 .dar-pl-actions button {
-    background: rgba(0, 0, 0, 0.6);
+    background: var(--dar-scrim-mini);
     backdrop-filter: blur(4px);
     border: 1px solid var(--dar-border-hairline);
     border-radius: var(--dar-radius-xs, 3px);
@@ -665,10 +706,10 @@
 .dar-miniplayer {
     position: fixed;
     z-index: 1000;
-    background: rgba(0, 0, 0, 0.65);
+    background: var(--dar-bg-modal);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--dar-border-hairline);
     border-radius: var(--dar-radius-sm);
     padding: 4px 6px;
     width: 170px;
@@ -712,13 +753,13 @@
     padding: 0;
 }
 .dar-mp-btn:hover {
-    background: rgba(255, 255, 255, 0.08);
+    background: color-mix(in srgb, var(--SmartThemeBodyColor) 8%, transparent);
     color: var(--dar-text-primary);
 }
 .dar-mp-progress {
     flex: 1;
     height: 2px;
-    background: rgba(255, 255, 255, 0.1);
+    background: color-mix(in srgb, var(--SmartThemeBodyColor) 10%, transparent);
     border-radius: 1px;
     position: relative;
     overflow: hidden;
@@ -736,9 +777,12 @@
     bottom: calc(100% + 6px);
     left: 50%;
     transform: translateX(-50%);
-    background: rgba(0, 0, 0, 0.85);
+    background: var(--dar-bg-modal);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     color: var(--dar-text-muted);
     padding: 3px 8px;
+    border: 1px solid var(--dar-border-hairline);
     border-radius: var(--dar-radius-xs);
     font-size: 9px;
     white-space: nowrap;
@@ -752,11 +796,11 @@
 .dar-tab-content::-webkit-scrollbar { width: 6px; }
 .dar-tab-content::-webkit-scrollbar-track { background: transparent; }
 .dar-tab-content::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.06);
+    background: color-mix(in srgb, var(--SmartThemeBodyColor) 6%, transparent);
     border-radius: 3px;
 }
 .dar-tab-content::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.12);
+    background: color-mix(in srgb, var(--SmartThemeBodyColor) 12%, transparent);
 }
 
 /* ---------- Placeholder (empty-state messaging) ---------------------- */
@@ -843,11 +887,11 @@
 .dar-toast--success { border-left-color: var(--dar-accent); }
 .dar-toast--success .dar-toast-icon { color: var(--dar-accent); }
 
-.dar-toast--error { border-left-color: #c97070; }
-.dar-toast--error .dar-toast-icon { color: #c97070; }
+.dar-toast--error { border-left-color: var(--dar-err); }
+.dar-toast--error .dar-toast-icon { color: var(--dar-err); }
 
-.dar-toast--warn { border-left-color: #d4a05a; }
-.dar-toast--warn .dar-toast-icon { color: #d4a05a; }
+.dar-toast--warn { border-left-color: var(--dar-warn); }
+.dar-toast--warn .dar-toast-icon { color: var(--dar-warn); }
 
 .dar-toast--info { border-left-color: var(--dar-neutral-active-strong); }
 .dar-toast--info .dar-toast-icon { color: var(--dar-neutral-active-strong); }
@@ -864,7 +908,7 @@
     position: fixed;
     inset: 0;
     z-index: 5000;
-    background: rgba(0, 0, 0, 0.55);
+    background: var(--dar-scrim);
     backdrop-filter: blur(6px);
     -webkit-backdrop-filter: blur(6px);
     display: flex;
@@ -937,14 +981,14 @@
     background: var(--dar-neutral-active-dim);
 }
 .dar-confirm-btn--danger {
-    background: rgba(201, 112, 112, 0.15);
-    border-color: rgba(201, 112, 112, 0.4);
-    color: #e09a9a;
+    background: color-mix(in srgb, var(--dar-err) 18%, transparent);
+    border-color: color-mix(in srgb, var(--dar-err) 45%, transparent);
+    color: var(--dar-err-bright);
 }
 .dar-confirm-btn--danger:hover {
-    background: rgba(201, 112, 112, 0.25);
-    border-color: rgba(201, 112, 112, 0.6);
-    color: #f0b0b0;
+    background: color-mix(in srgb, var(--dar-err) 28%, transparent);
+    border-color: color-mix(in srgb, var(--dar-err) 65%, transparent);
+    color: var(--dar-err-bright);
 }
 
 @keyframes dar-confirm-fade-in {
@@ -980,11 +1024,11 @@
 }
 
 .dar-track-row.selected .dar-track-check {
-    color: var(--dar-accent, #7aa2f7);
+    color: var(--dar-accent);
 }
 
 .dar-track-check:focus-visible {
-    outline: 2px solid var(--dar-accent, #7aa2f7);
+    outline: 2px solid var(--dar-accent);
     outline-offset: 2px;
     border-radius: 4px;
     opacity: 1;
@@ -994,12 +1038,12 @@
    `.current` treatment so the now-playing row still wins visually if both
    classes are present. */
 .dar-track-row.selected {
-    background: rgba(122, 162, 247, 0.10);
-    box-shadow: inset 3px 0 0 var(--dar-accent, #7aa2f7);
+    background: var(--dar-accent-bg);
+    box-shadow: inset 3px 0 0 var(--dar-accent);
 }
 
 .dar-track-row.selected.current {
-    background: rgba(122, 162, 247, 0.18);
+    background: var(--dar-accent-bg);
 }
 
 /* Bulk action bar — slots between the filter row and the track list when
@@ -1011,8 +1055,8 @@
     margin: 8px 0;
     padding: 8px 12px;
     border-radius: 8px;
-    background: rgba(20, 25, 42, 0.98);
-    border: 1px solid rgba(122, 162, 247, 0.25);
+    background: var(--dar-bg-modal);
+    border: 1px solid var(--dar-accent-border);
     animation: dar-bulk-bar-in 160ms ease;
     position: sticky;
     top: 0;
@@ -1025,7 +1069,7 @@
 
 .dar-bulk-count {
     font-weight: 600;
-    color: var(--dar-accent, #7aa2f7);
+    color: var(--dar-accent);
     margin-right: auto;
     font-size: 13px;
 }
@@ -1038,16 +1082,16 @@
     font-size: 12px;
     font-weight: 500;
     color: var(--dar-text, #e6e6e6);
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.10);
+    background: color-mix(in srgb, var(--SmartThemeBodyColor) 5%, transparent);
+    border: 1px solid var(--dar-neutral-active-soft);
     border-radius: 6px;
     cursor: pointer;
     transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
 }
 
 .dar-bulk-btn:hover {
-    background: rgba(255, 255, 255, 0.10);
-    border-color: rgba(255, 255, 255, 0.20);
+    background: color-mix(in srgb, var(--SmartThemeBodyColor) 10%, transparent);
+    border-color: var(--dar-neutral-active-dim);
 }
 
 .dar-bulk-btn--ghost {
@@ -1056,7 +1100,7 @@
 }
 
 .dar-bulk-btn--ghost:hover {
-    background: rgba(255, 255, 255, 0.06);
+    background: color-mix(in srgb, var(--SmartThemeBodyColor) 6%, transparent);
     color: var(--dar-text, #e6e6e6);
 }
 
@@ -1075,10 +1119,10 @@
     max-height: 86vh;
     overflow-y: auto;
     padding: 22px 24px;
-    background: var(--dar-modal-bg, rgba(20, 22, 30, 0.96));
+    background: var(--dar-bg-modal);
     backdrop-filter: blur(18px);
     -webkit-backdrop-filter: blur(18px);
-    border: 1px solid rgba(255, 255, 255, 0.10);
+    border: 1px solid var(--dar-neutral-active-soft);
     border-radius: 12px;
     box-shadow: 0 16px 48px rgba(0, 0, 0, 0.55);
     color: var(--dar-text, #e6e6e6);
@@ -1096,7 +1140,7 @@
 }
 
 .dar-bulk-tag-header i {
-    color: var(--dar-accent, #7aa2f7);
+    color: var(--dar-accent);
 }
 
 .dar-bulk-tag-row {
@@ -1109,7 +1153,7 @@
 }
 
 .dar-bulk-tag-row input[type="checkbox"] {
-    accent-color: var(--dar-accent, #7aa2f7);
+    accent-color: var(--dar-accent);
     cursor: pointer;
 }
 
@@ -1169,7 +1213,7 @@
 }
 
 .dar-emotion-check input[type="checkbox"] {
-    accent-color: var(--dar-accent, #7aa2f7);
+    accent-color: var(--dar-accent);
     cursor: pointer;
     flex-shrink: 0;
 }
@@ -1187,15 +1231,15 @@
     padding: 8px 10px;
     font-size: 13px;
     color: var(--dar-text, #e6e6e6);
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.10);
+    background: color-mix(in srgb, var(--SmartThemeBodyColor) 4%, transparent);
+    border: 1px solid var(--dar-neutral-active-soft);
     border-radius: 6px;
     outline: none;
     transition: border-color 120ms ease;
 }
 
 .dar-bulk-tag-input:focus {
-    border-color: var(--dar-accent, #7aa2f7);
+    border-color: var(--dar-accent);
 }
 
 .dar-bulk-tag-hint {
@@ -1204,13 +1248,13 @@
     font-size: 11.5px;
     line-height: 1.5;
     color: var(--dar-neutral-active, rgba(255, 255, 255, 0.7));
-    background: rgba(122, 162, 247, 0.06);
-    border: 1px solid rgba(122, 162, 247, 0.18);
+    background: var(--dar-accent-wash);
+    border: 1px solid var(--dar-accent-bg);
     border-radius: 6px;
 }
 
 .dar-bulk-tag-hint i {
-    color: var(--dar-accent, #7aa2f7);
+    color: var(--dar-accent);
     margin-right: 4px;
 }
 
@@ -1239,7 +1283,7 @@
     position: fixed;
     inset: 0;
     z-index: 5000;
-    background: rgba(0, 0, 0, 0.7);
+    background: var(--dar-scrim-strong);
     backdrop-filter: blur(4px);
     -webkit-backdrop-filter: blur(4px);
     display: flex;
@@ -1299,8 +1343,8 @@
 /* Info/note box inside sub-modals */
 .dar-sub-note {
     padding: 10px 12px;
-    background: rgba(88, 101, 242, 0.08);
-    border: 1px solid rgba(88, 101, 242, 0.2);
+    background: color-mix(in srgb, var(--dar-info) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--dar-info) 30%, transparent);
     border-radius: var(--dar-radius-sm);
     font-size: 12px;
     line-height: 1.5;
@@ -1350,12 +1394,12 @@
 .dar-sub-list::-webkit-scrollbar-track { background: transparent; }
 .dar-sub-modal::-webkit-scrollbar-thumb,
 .dar-sub-list::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.06);
+    background: color-mix(in srgb, var(--SmartThemeBodyColor) 6%, transparent);
     border-radius: 3px;
 }
 .dar-sub-modal::-webkit-scrollbar-thumb:hover,
 .dar-sub-list::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.12);
+    background: color-mix(in srgb, var(--SmartThemeBodyColor) 12%, transparent);
 }
 
 
@@ -1407,8 +1451,8 @@
 
 .dar-transfer-search input {
     width: 100%;
-    background: rgba(255,255,255,0.04);
-    border: 1px solid rgba(255,255,255,0.08);
+    background: color-mix(in srgb, var(--SmartThemeBodyColor) 4%, transparent);
+    border: 1px solid var(--dar-border-soft);
     border-radius: 4px;
     padding: 4px 8px;
     font-size: 12px;
@@ -1417,7 +1461,7 @@
 }
 
 .dar-transfer-search input:focus {
-    border-color: rgba(122, 162, 247, 0.4);
+    border-color: var(--dar-accent-dim);
 }
 
 .dar-transfer-items {
@@ -1439,7 +1483,7 @@
 }
 
 .dar-transfer-item:hover {
-    background: rgba(255, 255, 255, 0.06);
+    background: color-mix(in srgb, var(--SmartThemeBodyColor) 6%, transparent);
 }
 
 .dar-transfer-item .dar-ti-name {
@@ -1477,10 +1521,10 @@
 /* Drag states */
 .dar-transfer-item.dragging {
     opacity: 0.35;
-    background: rgba(122, 162, 247, 0.08);
+    background: var(--dar-accent-soft);
 }
 .dar-transfer-item.drag-over {
-    border-top: 2px solid var(--dar-accent, #7aa2f7);
+    border-top: 2px solid var(--dar-accent);
     padding-top: 4px;
 }
 
@@ -1497,11 +1541,11 @@
 .dar-transfer-items::-webkit-scrollbar { width: 5px; }
 .dar-transfer-items::-webkit-scrollbar-track { background: transparent; }
 .dar-transfer-items::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.06);
+    background: color-mix(in srgb, var(--SmartThemeBodyColor) 6%, transparent);
     border-radius: 3px;
 }
 .dar-transfer-items::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.12);
+    background: color-mix(in srgb, var(--SmartThemeBodyColor) 12%, transparent);
 }
 
 
@@ -1611,8 +1655,8 @@
     background: var(--dar-accent-soft);
 }
 .dar-folder-section--missing {
-    border-color: rgba(220, 130, 110, 0.35);
-    background: rgba(220, 130, 110, 0.08);
+    border-color: color-mix(in srgb, var(--dar-danger) 40%, transparent);
+    background: color-mix(in srgb, var(--dar-danger) 12%, transparent);
 }
 .dar-folder-section-title {
     font-weight: 600;
@@ -1626,7 +1670,7 @@
     color: var(--dar-accent);
 }
 .dar-folder-section--missing .dar-folder-section-title i {
-    color: rgb(220, 130, 110);
+    color: var(--dar-danger);
 }
 .dar-folder-file-list {
     list-style: none;
@@ -1794,10 +1838,10 @@
     align-items: center;
     gap: 2px;
     padding: 8px 5px 6px;
-    background: rgba(0, 0, 0, 0.88);
+    background: var(--dar-bg-modal);
     backdrop-filter: blur(14px);
     -webkit-backdrop-filter: blur(14px);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border: 1px solid var(--dar-border-soft);
     border-radius: var(--dar-radius-sm, 4px);
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
     pointer-events: auto;
@@ -1837,7 +1881,7 @@
     bottom: 0;
     width: 3px;
     transform: translateX(-50%);
-    background: rgba(255, 255, 255, 0.12);
+    background: color-mix(in srgb, var(--SmartThemeBodyColor) 12%, transparent);
     border-radius: 1.5px;
     overflow: hidden;
 }
@@ -1848,7 +1892,7 @@
     left: 0;
     right: 0;
     height: 50%;
-    background: var(--dar-text-primary, #d4d4d6);
+    background: var(--dar-text-primary);
     border-radius: 1.5px;
     pointer-events: none;
 }
@@ -1860,7 +1904,7 @@
     width: 12px;
     height: 12px;
     border-radius: 50%;
-    background: var(--dar-text-primary, #d4d4d6);
+    background: var(--dar-text-primary);
     border: none;
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
     /* Center horizontally on track; shift down so thumb center aligns with bottom edge */
@@ -1869,10 +1913,10 @@
     transition: background 80ms ease;
 }
 .dar-volume-slider-wrap:hover .dar-volume-slider-thumb {
-    background: #fff;
+    background: var(--dar-text-primary);
 }
 .dar-volume-slider-wrap:active .dar-volume-slider-thumb {
-    background: #fff;
+    background: var(--dar-text-primary);
 }
 
 
@@ -1970,7 +2014,7 @@
     color: var(--dar-text-muted);
 }
 .dar-cover-status.dar-cover-error {
-    color: #c97070;
+    color: var(--dar-err);
 }
 
 /* ---------- Manual playlist editor — compact header ------------------- */
@@ -2073,7 +2117,7 @@
 .dar-upload-text:focus,
 .dar-upload-select:focus {
     outline: none;
-    border-color: rgba(88, 101, 242, 0.6);
+    border-color: var(--dar-info);
 }
 
 .dar-upload-existing-row {
