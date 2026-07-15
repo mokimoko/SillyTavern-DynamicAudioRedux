@@ -28,7 +28,7 @@ Use SillyTavern's built-in extension installer:
 1. Open **Extensions** → **Install Extension**
 2. Paste this URL:
    ```
-   https://github.com/chatelainedev/SillyTavern-DynamicAudioRedux
+   https://github.com/mokimoko/SillyTavern-DynamicAudioRedux
    ```
 3. Click **Install** and reload if prompted
 
