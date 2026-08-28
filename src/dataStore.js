@@ -57,6 +57,36 @@ function encodeBase64(jsonString) {
     return btoa(binary);
 }
 
+function decodeBase64(b64) {
+    const binary = atob(b64.trim());
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return new TextDecoder().decode(bytes);
+}
+
+/**
+ * Parse the library file. It should be plain JSON, but a bad save path can leave
+ * it base64-encoded on disk (the payload we POST wasn't decoded server-side).
+ * A raw JSON.parse on that throws — which would make initDataStore() fall back
+ * to settings and silently drop imported tracks/playlists (the "my library got
+ * wiped" bug). So we self-heal: on a parse failure, try decoding base64 and
+ * parsing again. The next save rewrites the file as plain JSON, so this recovers
+ * cleanly rather than losing data. If it's neither, the original error surfaces.
+ */
+function parseLibraryText(text) {
+    try {
+        return JSON.parse(text);
+    } catch (parseErr) {
+        try {
+            const data = JSON.parse(decodeBase64(text));
+            debugLog('dar_library.json was base64-encoded on disk; decoded transparently (it will be rewritten as plain JSON on the next save).');
+            return data;
+        } catch {
+            throw parseErr; // not base64 either — surface the real JSON error
+        }
+    }
+}
+
 async function uploadJSON(data) {
     const json = JSON.stringify(data, null, 2);
     const base64 = encodeBase64(json);
@@ -85,7 +115,7 @@ async function downloadJSON() {
         throw new Error(`dar_library download failed: ${errorText}`);
     }
     const text = await response.text();
-    return JSON.parse(text);
+    return parseLibraryText(text);
 }
 
 // ============================================================

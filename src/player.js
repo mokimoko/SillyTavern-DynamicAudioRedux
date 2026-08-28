@@ -182,11 +182,23 @@ export async function playTrack(trackPath) {
 
     const audio = $('#audio_bgm')[0];
 
-    const pathParts = trackPath.split('/');
-    const encodedPath = pathParts.map((part, index) => {
-        return index === 0 ? part : encodeURIComponent(part);
-    }).join('/');
-    audio.src = encodedPath;
+    // Encode the URL for the <audio> src, but exactly ONCE. Track paths reach
+    // us in two forms: raw (e.g. "assets/bgm/My Song.mp3" from the ST/TT asset
+    // list) and already-percent-encoded (e.g. "/user/files/.../My%20Song.mp3"
+    // for imported folders — those keys are stored encoded in dar_library.json).
+    // Blindly re-encoding the latter produced "%2520" (a re-encoded '%'), which
+    // 404s and, via the catch below, cascades into an infinite retry loop that
+    // manifested as the play/pause flicker on TauriTavern. Decoding first
+    // collapses any existing encoding, so a single encodeURI pass is always
+    // correct for both forms. encodeURI (not encodeURIComponent) preserves '/'.
+    let src;
+    try {
+        src = encodeURI(decodeURI(trackPath));
+    } catch {
+        // decodeURI throws on a malformed %-sequence; fall back to the raw path.
+        src = trackPath;
+    }
+    audio.src = src;
     audio.volume = extension_settings.audio.bgm_volume * 0.01;
     audio.loop = extension_settings.audio.loop_single;
 

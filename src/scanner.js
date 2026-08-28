@@ -3,7 +3,7 @@
  * Dispatches 'tracksScanned' after a successful scan.
  */
 
-import { saveSettingsDebounced, getRequestHeaders } from '../../../../../script.js';
+import { saveSettingsDebounced } from '../../../../../script.js';
 import { getContext, extension_settings } from '../../../../extensions.js';
 
 import {
@@ -14,6 +14,7 @@ import {
     debugLog,
 } from './state.js';
 import { getImportedTrackUrls } from './dataStore.js';
+import { getAssetsLibrary, getCharacterBgm } from './hostAdapter.js';
 
 export function cleanFilename(filename) {
     let cleaned = filename;
@@ -49,20 +50,19 @@ export async function scanTracks() {
     debugLog('Scanning for tracks...');
 
     try {
-        const globalTracks = await fetch('/api/assets/get', {
-            method: 'POST',
-            headers: getRequestHeaders(),
-        }).then(r => r.json());
+        // Asset listing goes through the host adapter: HTTP /api/assets/* on
+        // real SillyTavern, invoke('get_assets_library'/'get_character_assets')
+        // on TauriTavern (which doesn't expose those HTTP routes). Both return
+        // the same shape. The adapter never throws — a failure yields empty
+        // lists rather than aborting the whole scan, so imported tracks and the
+        // trackListChanged event below always still run.
+        const globalTracks = await getAssetsLibrary();
 
         trackLibrary.global = (globalTracks.bgm || []).filter(f => f !== '.placeholder');
 
         const context = getContext();
         if (context.name2) {
-            const charTracks = await fetch(`/api/assets/character?name=${encodeURIComponent(context.name2)}&category=bgm`, {
-                method: 'POST',
-                headers: getRequestHeaders(),
-            }).then(r => r.json());
-
+            const charTracks = await getCharacterBgm(context.name2);
             trackLibrary.character[context.name2] = charTracks || [];
         }
 

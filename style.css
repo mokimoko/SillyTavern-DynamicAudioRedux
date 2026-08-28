@@ -90,6 +90,12 @@
     /* Transitions */
     --dar-t-fast: 100ms ease;
     --dar-t-base: 160ms ease;
+
+    /* Z-axis — above floating app panels, with dialogs layered internally. */
+    --dar-z-modal: 9998;
+    --dar-z-toast: 9999;
+    --dar-z-dialog: 10000;
+    --dar-z-popup: 10001;
 }
 
 /* Scope box-sizing defensively to our containers */
@@ -120,7 +126,7 @@
 .dar-modal-backdrop {
     position: fixed;
     inset: 0;
-    z-index: 100;
+    z-index: var(--dar-z-modal);
     background: var(--dar-scrim);
     backdrop-filter: blur(6px);
     -webkit-backdrop-filter: blur(6px);
@@ -799,7 +805,7 @@
     background: color-mix(in srgb, var(--SmartThemeBodyColor) 6%, transparent);
     border-radius: 3px;
 }
-.dar-tab-content::-webkit-scrollbar-thumb:hover {
+.dar-tab-content:hover::-webkit-scrollbar-thumb {
     background: color-mix(in srgb, var(--SmartThemeBodyColor) 12%, transparent);
 }
 
@@ -813,13 +819,12 @@
 }
 
 /* ---------- Toast notifications (ui.js darToast) ---------------------- */
-/* z-index 9998: above our modal (100), drawers (3000), movingDivs (4000),
-   miniplayer (1000); just under ST's popups/toastr (9999-10000). */
+/* Above the main modal and floating panels; nested dialogs remain higher. */
 .dar-toast-container {
     position: fixed;
     top: 16px;
     right: 16px;
-    z-index: 9998;
+    z-index: var(--dar-z-toast);
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -902,12 +907,11 @@
 }
 
 /* ---------- Confirm dialog (ui.js darConfirm) ------------------------- */
-/* z-index 5000: above our own modal (100) so a delete-confirm sits on top
-   of the audio modal. Below ST's popups (9999+). */
+/* Above the main audio modal so a delete-confirm always sits on top. */
 .dar-confirm-backdrop {
     position: fixed;
     inset: 0;
-    z-index: 5000;
+    z-index: var(--dar-z-dialog);
     background: var(--dar-scrim);
     backdrop-filter: blur(6px);
     -webkit-backdrop-filter: blur(6px);
@@ -1275,14 +1279,13 @@
    Used by: autoTag.js, playlistFromChat.js, playlists.js, trackList.js.
    Replaces per-modal inline jQuery .css({}) calls with class-based styling
    that uses dar- design tokens for visual consistency.
-   z-index 5000: above the main audio modal (100) and miniplayer (1000),
-   below ST popups/toastr (9999+). Same layer as dar-confirm.
+   Uses the same dialog layer as dar-confirm, above the main audio modal.
    ========================================================================= */
 
 .dar-sub-backdrop {
     position: fixed;
     inset: 0;
-    z-index: 5000;
+    z-index: var(--dar-z-dialog);
     background: var(--dar-scrim-strong);
     backdrop-filter: blur(4px);
     -webkit-backdrop-filter: blur(4px);
@@ -1397,8 +1400,8 @@
     background: color-mix(in srgb, var(--SmartThemeBodyColor) 6%, transparent);
     border-radius: 3px;
 }
-.dar-sub-modal::-webkit-scrollbar-thumb:hover,
-.dar-sub-list::-webkit-scrollbar-thumb:hover {
+.dar-sub-modal:hover::-webkit-scrollbar-thumb,
+.dar-sub-list:hover::-webkit-scrollbar-thumb {
     background: color-mix(in srgb, var(--SmartThemeBodyColor) 12%, transparent);
 }
 
@@ -1544,7 +1547,7 @@
     background: color-mix(in srgb, var(--SmartThemeBodyColor) 6%, transparent);
     border-radius: 3px;
 }
-.dar-transfer-items::-webkit-scrollbar-thumb:hover {
+.dar-transfer-items:hover::-webkit-scrollbar-thumb {
     background: color-mix(in srgb, var(--SmartThemeBodyColor) 12%, transparent);
 }
 
@@ -1631,6 +1634,36 @@
     font-size: 0.9em;
     flex: 1;
     min-width: 0;
+}
+
+/* Server-folder dropdown (Nebula Loader folderList feature). Shown only when
+   the plugin is present; the manual webkitdirectory picker sits below it. */
+.dar-folder-select {
+    flex: 1;
+    min-width: 0;
+    padding: 6px 10px;
+    background: var(--dar-bg-input, rgba(0, 0, 0, 0.25));
+    color: var(--dar-text-primary);
+    border: 1px solid var(--dar-border, rgba(255, 255, 255, 0.15));
+    border-radius: 6px;
+    font-size: 0.9em;
+}
+.dar-folder-plugin-divider {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 14px 0 4px;
+    color: var(--dar-text-muted);
+    font-size: 0.74em;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.dar-folder-plugin-divider::before,
+.dar-folder-plugin-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--dar-border, rgba(255, 255, 255, 0.12));
 }
 
 /* Verify step */
@@ -1832,7 +1865,7 @@
 
 .dar-volume-popup {
     position: fixed;
-    z-index: 10001;
+    z-index: var(--dar-z-popup);
     display: none;
     flex-direction: column;
     align-items: center;

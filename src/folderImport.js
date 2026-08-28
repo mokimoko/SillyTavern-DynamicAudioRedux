@@ -26,10 +26,22 @@ import {
     registerImportedTracks,
     removeFolder,
     getFolders,
+    updateFolderSync,
 } from './dataStore.js';
+import {
+    isFolderListAvailable,
+    fetchAudioFolders,
+    fetchAudioTracks,
+} from './folderUpload.js';
 import { scanTracks } from './scanner.js';
 import { darToast } from './ui.js';
 import { DEBUG_PREFIX, debugLog, debugError } from './state.js';
+
+// Dedicated parent folder for organized soundtrack sets. The server-folder
+// dropdown lists this folder's subfolders first, then any other top-level
+// audio folders under user/files/. Purely a listing convenience — nothing
+// requires the user to use it.
+const SOUNDTRACKS_ROOT = 'soundtracks';
 
 const AUDIO_EXTENSIONS = ['mp3', 'wav', 'ogg', 'flac', 'm4a', 'aac', 'opus'];
 const AUDIO_RE = new RegExp(`\\.(${AUDIO_EXTENSIONS.join('|')})$`, 'i');
@@ -135,6 +147,23 @@ export function openFolderImportModal() {
             <h3><i class="fa-solid fa-folder-plus"></i> Import Folder</h3>
 
             <div data-dar="folder-step-pick">
+                <div data-dar="folder-plugin" hidden>
+                    <p class="dar-sub-note">
+                        Pick a folder already on the server (under <code>user/files/</code>,
+                        e.g. a <code>${SOUNDTRACKS_ROOT}/</code> subfolder) and import or
+                        update it directly — no re-selecting from your computer.
+                    </p>
+                    <div class="dar-folder-pick-row">
+                        <select class="dar-folder-select" data-dar="folder-select">
+                            <option value="">Loading folders…</option>
+                        </select>
+                        <button type="button" class="dar-text-btn" data-dar="folder-import-selected" disabled>
+                            <i class="fa-solid fa-cloud-arrow-down"></i> Import / Update
+                        </button>
+                    </div>
+                    <div class="dar-folder-plugin-divider"><span>or pick from your computer</span></div>
+                </div>
+
                 <p class="dar-sub-note">
                     Drop your audio folder into <code>user/files/</code> on disk first
                     (so it lives at <code>SillyTavern/data/&lt;user&gt;/files/&lt;your-folder&gt;/</code>),
@@ -180,6 +209,9 @@ export function openFolderImportModal() {
     const $cancel     = q('folder-cancel');
     const $confirm    = q('folder-confirm');
     const $existing   = q('folder-existing');
+    const $plugin     = q('folder-plugin');
+    const $select     = q('folder-select');
+    const $importSel  = q('folder-import-selected');
 
     const close = () => backdrop.remove();
     backdrop.addEventListener('click', (e) => {
@@ -188,6 +220,56 @@ export function openFolderImportModal() {
     $cancel.addEventListener('click', close);
 
     renderExistingFolders($existing);
+
+    // Plugin-powered discovery. When Nebula Loader exposes folderList, reveal a
+    // server-folder dropdown (no webkitdirectory needed), switch the existing-
+    // folder "rescan" buttons to one-click plugin updates, and quietly auto-sync
+    // already-registered folders. All of this is additive: if the plugin is
+    // absent this block does nothing and the manual picker below is unaffected.
+    (async () => {
+        if (!(await isFolderListAvailable())) return;
+
+        const folders = await fetchImportableFolders();
+        if (folders.length === 0) {
+            $select.innerHTML = `<option value="">No server folders found</option>`;
+            $importSel.disabled = true;
+        } else {
+            $select.innerHTML =
+                `<option value="">Choose a folder…</option>` +
+                folders.map(f =>
+                    `<option value="${_esc(f.path)}" data-name="${_esc(f.name)}">${_esc(f.name)} (${f.trackCount})</option>`
+                ).join('');
+            $importSel.disabled = true;
+        }
+        $plugin.hidden = false;
+
+        // Existing folders can now update via the plugin instead of re-picking.
+        renderExistingFolders($existing, true);
+
+        $select.addEventListener('change', () => {
+            $importSel.disabled = !$select.value;
+        });
+
+        $importSel.addEventListener('click', async () => {
+            const folderKey = $select.value;
+            if (!folderKey) return;
+            const displayName = $select.selectedOptions[0]?.dataset?.name || folderKey;
+            $importSel.disabled = true;
+            const prevHtml = $importSel.innerHTML;
+            $importSel.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Working…`;
+            try {
+                await importFolderViaPlugin(folderKey, displayName, $existing);
+            } finally {
+                $importSel.innerHTML = prevHtml;
+                $importSel.disabled = !$select.value;
+            }
+        });
+
+        // Quiet auto-update of already-registered folders on open — only ever
+        // ADDS newly-found tracks, never removes. Silent unless something changed.
+        autoSyncFolders($existing).catch(err =>
+            debugError('Auto-sync folders failed:', err));
+    })();
 
     $browse.addEventListener('click', () => $input.click());
 
@@ -332,6 +414,122 @@ function renderVerifyResults(found, missing, folderName) {
     return foundHtml + missingHtml;
 }
 
+// ============================================================
+// Plugin-powered folder discovery (Nebula Loader)
+// ============================================================
+
+/**
+ * Gather the folders offered in the server-folder dropdown: the soundtracks/
+ * parent's subfolders first, then any other top-level audio folders under
+ * user/files/ (excluding the soundtracks parent itself, which would otherwise
+ * appear as one giant aggregate entry). Deduped by path, sorted by name.
+ */
+async function fetchImportableFolders() {
+    const [nested, top] = await Promise.all([
+        fetchAudioFolders(SOUNDTRACKS_ROOT),
+        fetchAudioFolders(''),
+    ]);
+    const byPath = new Map();
+    for (const f of nested) byPath.set(f.path, f);
+    for (const f of top) {
+        if (f.path === SOUNDTRACKS_ROOT) continue;
+        if (!byPath.has(f.path)) byPath.set(f.path, f);
+    }
+    return [...byPath.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * Register a plugin-sourced track list under a folder key. The key is the
+ * folder's path relative to user/files (e.g. "soundtracks/Skyrim"), which also
+ * tells a later update exactly where to re-scan. Track URLs come from the
+ * plugin's relativePath; each track's subfolder comes from its subpath (the
+ * path within the chosen folder). Returns { total, added }.
+ */
+function registerPluginTracks(folderKey, tracks) {
+    addFolder(folderKey);
+    const rows = tracks.map(t => {
+        const parts = (t.subpath || t.name).split('/');
+        const subfolder = parts.length > 1 ? parts.slice(0, -1).join('/') : '';
+        return {
+            url: buildImportedTrackUrl(t.relativePath),
+            originalName: t.name,
+            folder: folderKey,
+            subfolder,
+        };
+    });
+    const added = registerImportedTracks(rows);
+    updateFolderSync(folderKey);
+    return { total: rows.length, added };
+}
+
+/**
+ * Import (or update) a folder chosen from the dropdown. Fetches its tracks from
+ * the plugin and registers them — no webkitdirectory pick, no HEAD verify.
+ */
+async function importFolderViaPlugin(folderKey, displayName, $existingContainer) {
+    const tracks = await fetchAudioTracks(folderKey);
+    if (tracks.length === 0) {
+        darToast.warn(`No audio files found in "${displayName}".`);
+        return;
+    }
+    const { total, added } = registerPluginTracks(folderKey, tracks);
+    darToast.success(
+        added > 0
+            ? `Imported "${displayName}": +${added} new (${total - added} already in library)`
+            : `"${displayName}" is up to date (${total} track${total === 1 ? '' : 's'})`
+    );
+    debugLog(`Plugin import "${folderKey}": ${total} tracks, ${added} new`);
+    await scanTracks();
+    if ($existingContainer) renderExistingFolders($existingContainer, true);
+}
+
+/**
+ * One-click update of an already-registered folder via the plugin: re-list its
+ * tracks and register any new ones. Used by the "rescan" button when the plugin
+ * is available (replacing the webkitdirectory re-pick).
+ */
+async function updateFolderViaPlugin(folderKey, $existingContainer) {
+    darToast.info(`Updating "${folderKey}"…`);
+    const tracks = await fetchAudioTracks(folderKey);
+    if (tracks.length === 0) {
+        darToast.warn(`No audio found for "${folderKey}" on the server (folder moved or emptied?).`);
+        return;
+    }
+    const { total, added } = registerPluginTracks(folderKey, tracks);
+    darToast.success(
+        added > 0
+            ? `Updated "${folderKey}": +${added} new (${total - added} already in library)`
+            : `"${folderKey}": no new tracks (${total} in library)`
+    );
+    await scanTracks();
+    if ($existingContainer) renderExistingFolders($existingContainer, true);
+}
+
+/**
+ * Quietly re-list every registered folder via the plugin and register any newly
+ * added tracks. Runs on modal open when the plugin is available. Only ADDS —
+ * never removes — and stays silent unless it actually found something new.
+ */
+async function autoSyncFolders($existingContainer) {
+    const folders = getFolders();
+    if (folders.length === 0) return;
+
+    let totalNew = 0;
+    for (const key of folders) {
+        const tracks = await fetchAudioTracks(key);
+        if (tracks.length === 0) continue; // folder gone/empty on disk — leave as-is
+        const { added } = registerPluginTracks(key, tracks);
+        totalNew += added;
+    }
+
+    if (totalNew > 0) {
+        darToast.success(`Auto-sync: added ${totalNew} new track${totalNew === 1 ? '' : 's'}.`);
+        debugLog(`Auto-sync added ${totalNew} new tracks across ${folders.length} folder(s)`);
+        await scanTracks();
+        if ($existingContainer) renderExistingFolders($existingContainer, true);
+    }
+}
+
 /**
  * Rescan an already-registered folder: re-pick the same directory on disk
  * and register any audio files that weren't already in the library. Existing
@@ -424,7 +622,7 @@ async function rescanFolder(folderName, $existingContainer) {
 /**
  * Paint the "already registered" list inside the picker step.
  */
-function renderExistingFolders($container) {
+function renderExistingFolders($container, pluginAvailable = false) {
     const folders = getFolders();
     if (folders.length === 0) {
         $container.innerHTML = '';
@@ -434,7 +632,7 @@ function renderExistingFolders($container) {
         `<div class="dar-folder-existing-item">
              <i class="fa-solid fa-folder"></i>
              <span class="dar-folder-existing-name">${_esc(name)}</span>
-             <button type="button" class="dar-icon-btn" data-folder-rescan="${_esc(name)}" title="Rescan — pick this folder again to add any new audio files">
+             <button type="button" class="dar-icon-btn" data-folder-rescan="${_esc(name)}" title="${pluginAvailable ? 'Update — re-scan this folder on the server for new audio' : 'Rescan — pick this folder again to add any new audio files'}">
                  <i class="fa-solid fa-arrows-rotate"></i>
              </button>
              <button type="button" class="dar-icon-btn" data-folder-remove="${_esc(name)}" title="Remove this folder from DAR">
@@ -451,7 +649,11 @@ function renderExistingFolders($container) {
     $container.querySelectorAll('[data-folder-rescan]').forEach(btn => {
         btn.addEventListener('click', () => {
             const name = btn.dataset.folderRescan;
-            rescanFolder(name, $container);
+            if (pluginAvailable) {
+                updateFolderViaPlugin(name, $container);
+            } else {
+                rescanFolder(name, $container);
+            }
         });
     });
 
@@ -467,7 +669,7 @@ function renderExistingFolders($container) {
             const removed = removeFolder(name);
             darToast.success(`Removed "${name}" (${removed} track${removed === 1 ? '' : 's'})`);
             await scanTracks();
-            renderExistingFolders($container);
+            renderExistingFolders($container, pluginAvailable);
         });
     });
 }

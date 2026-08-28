@@ -28,6 +28,7 @@ import { buildImportedTrackUrl } from './folderImport.js';
 import { scanTracks } from './scanner.js';
 import { darToast } from './ui.js';
 import { DEBUG_PREFIX, debugLog, debugError } from './state.js';
+import { isTauri, tauriUploadBatch } from './hostAdapter.js';
 
 const AUDIO_EXTENSIONS = ['mp3', 'wav', 'ogg', 'flac', 'm4a', 'aac', 'opus'];
 const AUDIO_RE = new RegExp(`\\.(${AUDIO_EXTENSIONS.join('|')})$`, 'i');
@@ -75,6 +76,7 @@ async function probeFeatures() {
  * is missing, so the caller can keep the button hidden.
  */
 export async function isAudioUploadAvailable() {
+    if (isTauri()) return true; // native upload_user_file handles subfolders
     const features = await probeFeatures();
     return Boolean(features?.audioUpload);
 }
@@ -84,8 +86,61 @@ export async function isAudioUploadAvailable() {
  * global assets/bgm/ folder).
  */
 export async function isBgmUploadAvailable() {
+    if (isTauri()) return true; // native upload_user_file writes into assets/bgm/
     const features = await probeFeatures();
     return Boolean(features?.bgmUpload);
+}
+
+/**
+ * True if the plugin advertises the folderList feature — read-only discovery of
+ * audio folders under user/files/. Lets DAR offer a server-folder dropdown
+ * instead of the webkitdirectory picker, and auto-update registered folders.
+ * Resolves false when the plugin is absent, so callers keep the manual picker.
+ */
+export async function isFolderListAvailable() {
+    const features = await probeFeatures();
+    return Boolean(features?.folderList);
+}
+
+/**
+ * List importable audio folders under user/files/<root> via the plugin. `root`
+ * is optional ('' lists top-level folders; 'soundtracks' lists that parent's
+ * subfolders). Returns the plugin's folder array ([{ name, path, trackCount }])
+ * or [] on any failure (absent plugin, network hiccup, etc.).
+ */
+export async function fetchAudioFolders(root = '') {
+    try {
+        const qs = root ? `?root=${encodeURIComponent(root)}` : '';
+        const r = await fetch(`${NEBULA_BASE}/audio/folders${qs}`, {
+            method: 'GET',
+            headers: getRequestHeaders(),
+        });
+        if (!r.ok) return [];
+        const data = await r.json();
+        return Array.isArray(data?.folders) ? data.folders : [];
+    } catch {
+        return [];
+    }
+}
+
+/**
+ * List every audio track under user/files/<dir> (recursive) via the plugin.
+ * Returns the plugin's track array ([{ name, relativePath, subpath }]) or []
+ * on failure. `dir` is a path relative to user/files, e.g. 'soundtracks/Skyrim'.
+ */
+export async function fetchAudioTracks(dir) {
+    if (!dir) return [];
+    try {
+        const r = await fetch(`${NEBULA_BASE}/audio/tracks?dir=${encodeURIComponent(dir)}`, {
+            method: 'GET',
+            headers: getRequestHeaders(),
+        });
+        if (!r.ok) return [];
+        const data = await r.json();
+        return Array.isArray(data?.tracks) ? data.tracks : [];
+    } catch {
+        return [];
+    }
 }
 
 // ============================================================
@@ -181,6 +236,13 @@ function sanitizeFilename(name) {
  * Throws on transport/HTTP error so the caller can surface it.
  */
 async function postAudioBatch(files) {
+    // TauriTavern: no nebula-loader plugin. Write each file via the native
+    // upload_user_file invoke, which accepts a relative path with subfolders
+    // (e.g. "Combat/boss.mp3"). Returns the same { ok, written, failed, results }
+    // shape as the plugin route below, so the caller is unchanged.
+    if (isTauri()) {
+        return tauriUploadBatch(files);
+    }
     const response = await fetch(`${NEBULA_BASE}/audio/upload`, {
         method: 'POST',
         headers: getRequestHeaders(),
@@ -455,6 +517,17 @@ export function openFolderUploadModal() {
  * Throws on transport/HTTP error so the caller can surface it.
  */
 async function postBgmBatch(files) {
+    // TauriTavern: write flat into the global bgm library. The plugin wrote to
+    // assets/bgm/; upload_user_file takes a path relative to the user data root,
+    // so we prefix each bare filename with "assets/bgm/". (Verified target on a
+    // live TT before relying on this in production.)
+    if (isTauri()) {
+        const prefixed = files.map(f => ({
+            name: `assets/bgm/${String(f.name).split('/').pop()}`,
+            data: f.data,
+        }));
+        return tauriUploadBatch(prefixed);
+    }
     const response = await fetch(`${NEBULA_BASE}/bgm/upload`, {
         method: 'POST',
         headers: getRequestHeaders(),
