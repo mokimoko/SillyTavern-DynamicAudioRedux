@@ -71,6 +71,7 @@ import { openAutoTagModal, autoTagSingle } from './autoTag.js';
 import { openFolderImportModal } from './folderImport.js';
 import { openFolderUploadModal, openBgmUploadModal, isAudioUploadAvailable, isBgmUploadAvailable } from './folderUpload.js';
 import { openPlaylistFromChatModal } from './playlistFromChat.js';
+import { makeModalDraggable } from './draggableModal.js';
 
 const MODAL_ID = 'dar-audio-modal-backdrop';
 const VALID_TABS = ['nowplaying', 'playback', 'library', 'playlists', 'preferences'];
@@ -78,6 +79,7 @@ const DEFAULT_TAB = 'nowplaying';
 
 let modalRoot = null;      // the .dar-modal-backdrop element (full overlay)
 let modalShell = null;     // the inner .dar-modal element
+let draggableModal = null;
 let activeTab = DEFAULT_TAB;
 
 function buildModal() {
@@ -282,6 +284,11 @@ function buildModal() {
     $('body').append($root);
     modalRoot = $root[0];
     modalShell = modalRoot.querySelector('.dar-modal');
+    draggableModal = makeModalDraggable(modalShell, modalShell.querySelector('.dar-now-playing'), {
+        prefix: 'dar-modal',
+        draggingClass: 'dar-modal-dragging',
+        ignoreSelector: '.dar-np-progress',
+    });
 
     // Default active tab
     switchTab(DEFAULT_TAB);
@@ -1767,6 +1774,7 @@ function refreshPreferencesTab() {
 export function openAudioModal() {
     if (!modalRoot) buildModal();
     modalRoot.style.display = 'flex';
+    requestAnimationFrame(() => draggableModal?.clamp());
     // Sync everything to current state (settings may have changed via slash commands)
     refreshNowPlaying();
     syncPlayPauseIcon();

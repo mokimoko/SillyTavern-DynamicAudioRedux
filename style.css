@@ -136,6 +136,8 @@
 }
 
 .dar-modal {
+    --dar-modal-drag-x: 0px;
+    --dar-modal-drag-y: 0px;
     width: min(780px, 92vw);
     height: min(640px, 88vh);
     background: var(--dar-bg-modal);
@@ -151,7 +153,9 @@
     color: var(--dar-text-primary);
     font-family: inherit;
     font-size: 13px;
+    translate: var(--dar-modal-drag-x) var(--dar-modal-drag-y);
 }
+.dar-modal.dar-modal-dragging { animation: none; }
 
 /* ---------- Now-playing strip ----------------------------------------- */
 .dar-now-playing {
@@ -160,7 +164,11 @@
     gap: 10px;
     padding: 8px 14px;
     border-bottom: 1px solid var(--dar-border-hairline);
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
 }
+.dar-modal-dragging .dar-now-playing { cursor: grabbing; }
 .dar-np-info { flex: 1; min-width: 0; }
 .dar-np-title {
     font-size: 12px;
@@ -777,26 +785,6 @@
     background: var(--dar-neutral-active-strong);
     border-radius: 1px;
 }
-
-.dar-miniplayer-label {
-    position: absolute;
-    bottom: calc(100% + 6px);
-    left: 50%;
-    transform: translateX(-50%);
-    background: var(--dar-bg-modal);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    color: var(--dar-text-muted);
-    padding: 3px 8px;
-    border: 1px solid var(--dar-border-hairline);
-    border-radius: var(--dar-radius-xs);
-    font-size: 9px;
-    white-space: nowrap;
-    pointer-events: none;
-    opacity: 0;
-    transition: opacity var(--dar-t-base);
-}
-.dar-miniplayer:hover .dar-miniplayer-label { opacity: 1; }
 
 /* ---------- Modal scrollbar (WebKit) ---------------------------------- */
 .dar-tab-content::-webkit-scrollbar { width: 6px; }

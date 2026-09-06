@@ -49,7 +49,6 @@ export function createMiniplayer() {
     mp.id = 'audio_miniplayer';
     mp.className = 'dar-miniplayer';
     mp.innerHTML = `
-        <div class="dar-miniplayer-label">drag me anywhere</div>
         <div class="dar-miniplayer-controls">
             <button class="dar-mp-btn" id="miniplayer_mute" title="Mute/Unmute" type="button">
                 <i class="fa-solid fa-volume-high" id="miniplayer_mute_icon"></i>
